@@ -1,0 +1,647 @@
+import {
+  CESS_RATE,
+  LIMITS,
+  NEW_REGIME_MAX_SURCHARGE,
+  NEW_REGIME_SLABS,
+  OLD_REGIME_SLABS,
+  OLD_REGIME_SLABS_SENIOR,
+  OLD_REGIME_SLABS_SUPER_SENIOR,
+  REBATE_87A,
+  STANDARD_DEDUCTION,
+  SURCHARGE_BANDS,
+  type Slab,
+} from "./constants";
+
+export type Regime = "new" | "old";
+
+export type SalaryInput = {
+  basic: number;
+  hra: number;
+  specialAllowance: number;
+  lta: number;
+  otherAllowances: number;
+  /** Employer contribution to NPS — deductible u/s 80CCD(2) in both regimes */
+  employerNps: number;
+  professionalTax: number;
+  tdsDeducted: number;
+};
+
+export type HousePropertyInput = {
+  enabled: boolean;
+  type: "self-occupied" | "let-out";
+  annualRentReceived: number;
+  municipalTaxesPaid: number;
+  homeLoanInterest: number;
+};
+
+export type OtherSourcesInput = {
+  savingsInterest: number;
+  fdInterest: number;
+  dividend: number;
+  other: number;
+};
+
+export type HraInput = {
+  claiming: boolean;
+  rentPaidAnnual: number;
+  metroCity: boolean;
+};
+
+/** Old-regime Chapter VI-A inputs, as the user enters them (pre-cap) */
+export type DeductionInput = {
+  s80C: number;
+  s80CCD1B: number;
+  s80D_self: number;
+  s80D_parents: number;
+  s80D_parents_senior: boolean;
+  s80DDB: number;
+  s80E: number;
+  s80G: number;
+  s80TTA: number;
+  s80EEB: number;
+  s80U: number;
+};
+
+export type TaxpayerInput = {
+  age: number;
+  regime: Regime;
+  salary: SalaryInput;
+  houseProperty: HousePropertyInput;
+  otherSources: OtherSourcesInput;
+  hra: HraInput;
+  deductions: DeductionInput;
+  advanceTaxPaid: number;
+  selfAssessmentTaxPaid: number;
+  tdsOnOtherIncome: number;
+};
+
+export type LineItem = {
+  label: string;
+  amount: number;
+  note?: string;
+  /** true when the line is a subtraction from income */
+  negative?: boolean;
+};
+
+export type TaxComputation = {
+  regime: Regime;
+  grossSalary: number;
+  /** exempt allowances (HRA etc.) — old regime only */
+  exemptAllowances: number;
+  hraExemption: number;
+  standardDeduction: number;
+  professionalTax: number;
+  incomeFromSalary: number;
+  incomeFromHouseProperty: number;
+  incomeFromOtherSources: number;
+  grossTotalIncome: number;
+  chapterVIA: number;
+  chapterVIABreakdown: LineItem[];
+  totalIncome: number;
+  taxBeforeRebate: number;
+  slabBreakdown: { from: number; to: number | null; rate: number; tax: number }[];
+  rebate87A: number;
+  marginalRelief: number;
+  taxAfterRebate: number;
+  surcharge: number;
+  cess: number;
+  totalTaxLiability: number;
+  tdsCredit: number;
+  advanceTax: number;
+  selfAssessmentTax: number;
+  /** positive => payable, negative => refund due */
+  balance: number;
+  refundDue: number;
+  taxPayable: number;
+  effectiveRate: number;
+};
+
+const r0 = (n: number) => Math.round(n);
+const clampMin0 = (n: number) => (n > 0 ? n : 0);
+const num = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? n : 0);
+const inr = (n: number) => n.toLocaleString("en-IN");
+
+/** ------------------------------------------------------------------
+ *  Slab arithmetic
+ *  ------------------------------------------------------------------ */
+export function slabsFor(regime: Regime, age: number): Slab[] {
+  if (regime === "new") return NEW_REGIME_SLABS;
+  if (age >= 80) return OLD_REGIME_SLABS_SUPER_SENIOR;
+  if (age >= 60) return OLD_REGIME_SLABS_SENIOR;
+  return OLD_REGIME_SLABS;
+}
+
+export function applySlabs(taxableIncome: number, slabs: Slab[]) {
+  let remaining = clampMin0(taxableIncome);
+  let previousCeiling = 0;
+  let tax = 0;
+  const breakdown: TaxComputation["slabBreakdown"] = [];
+
+  for (const slab of slabs) {
+    if (remaining <= 0) break;
+    const width =
+      slab.upTo === null ? remaining : Math.max(0, slab.upTo - previousCeiling);
+    const chunk = Math.min(remaining, width);
+    const slabTax = chunk * slab.rate;
+    if (chunk > 0) {
+      breakdown.push({
+        from: previousCeiling,
+        to: slab.upTo,
+        rate: slab.rate,
+        tax: slabTax,
+      });
+    }
+    tax += slabTax;
+    remaining -= chunk;
+    previousCeiling = slab.upTo ?? previousCeiling;
+  }
+
+  return { tax, breakdown };
+}
+
+/** ------------------------------------------------------------------
+ *  HRA exemption u/s 10(13A) — least of the three
+ *  ------------------------------------------------------------------ */
+export function computeHraExemption(input: {
+  basic: number;
+  hraReceived: number;
+  rentPaidAnnual: number;
+  metroCity: boolean;
+}) {
+  const basic = num(input.basic);
+  const hraReceived = num(input.hraReceived);
+  const rent = num(input.rentPaidAnnual);
+
+  const actualHra = hraReceived;
+  const rentOverTenPercent = clampMin0(rent - 0.1 * basic);
+  const cityLimit = (input.metroCity ? 0.5 : 0.4) * basic;
+
+  const exemption = Math.max(0, Math.min(actualHra, rentOverTenPercent, cityLimit));
+
+  return {
+    exemption,
+    legs: [
+      { label: "HRA actually received", amount: actualHra },
+      { label: "Rent paid minus 10% of basic salary", amount: rentOverTenPercent },
+      {
+        label: `${input.metroCity ? "50" : "40"}% of basic salary (${
+          input.metroCity ? "metro city" : "non-metro city"
+        })`,
+        amount: cityLimit,
+      },
+    ],
+    winnerIndex: [actualHra, rentOverTenPercent, cityLimit].indexOf(exemption),
+  };
+}
+
+/** ------------------------------------------------------------------
+ *  House property income (Sections 22-24)
+ *  ------------------------------------------------------------------ */
+export function computeHouseProperty(hp: HousePropertyInput, regime: Regime) {
+  if (!hp.enabled) {
+    return { income: 0, steps: [] as LineItem[], setOffCapped: false, rawIncome: 0 };
+  }
+
+  const steps: LineItem[] = [];
+
+  if (hp.type === "self-occupied") {
+    // Annual value of a self-occupied house is nil; only the loan interest is
+    // allowed, and only under the old regime.
+    const interest = Math.min(
+      num(hp.homeLoanInterest),
+      LIMITS.homeLoanInterestSelfOccupied,
+    );
+    const allowed = regime === "old" ? interest : 0;
+    steps.push({ label: "Annual value (self-occupied)", amount: 0 });
+    steps.push({
+      label: "Interest on housing loan u/s 24(b)",
+      amount: allowed,
+      negative: true,
+      note:
+        regime === "new"
+          ? "Not allowed for a self-occupied house under the new regime"
+          : num(hp.homeLoanInterest) > LIMITS.homeLoanInterestSelfOccupied
+            ? `Capped at ₹2,00,000 — you entered ₹${inr(num(hp.homeLoanInterest))}`
+            : undefined,
+    });
+    const raw = -allowed;
+    const income = Math.max(raw, -LIMITS.housePropertyLossSetOff);
+    return { income, steps, setOffCapped: raw < income, rawIncome: raw };
+  }
+
+  const gav = num(hp.annualRentReceived);
+  const municipal = num(hp.municipalTaxesPaid);
+  const nav = clampMin0(gav - municipal);
+  const standard = nav * 0.3;
+  const interest = num(hp.homeLoanInterest);
+
+  steps.push({ label: "Gross annual value (rent received)", amount: gav });
+  steps.push({ label: "Municipal taxes paid", amount: municipal, negative: true });
+  steps.push({ label: "Net annual value", amount: nav });
+  steps.push({
+    label: "Standard deduction u/s 24(a) — 30% of net annual value",
+    amount: standard,
+    negative: true,
+  });
+  steps.push({
+    label: "Interest on housing loan u/s 24(b)",
+    amount: interest,
+    negative: true,
+  });
+
+  const raw = nav - standard - interest;
+
+  // Under the new regime a loss under this head cannot be set off against any
+  // other head, and cannot be carried forward either — the interest is still
+  // allowed against the rent, but a negative result simply stops at zero.
+  if (regime === "new") {
+    if (raw < 0) {
+      steps.push({
+        label: "Loss disallowed under the new regime",
+        amount: -raw,
+        note: "A house property loss cannot be set off against salary, or carried forward, under section 115BAC",
+      });
+    }
+    return { income: Math.max(0, raw), steps, setOffCapped: false, rawIncome: raw };
+  }
+
+  // Old regime: a loss can be set off against other heads up to ₹2,00,000 a
+  // year; the balance is carried forward for up to eight years.
+  const income = raw < 0 ? Math.max(raw, -LIMITS.housePropertyLossSetOff) : raw;
+
+  return { income, steps, setOffCapped: raw < income, rawIncome: raw };
+}
+
+/** ------------------------------------------------------------------
+ *  Chapter VI-A
+ *  ------------------------------------------------------------------ */
+export function computeChapterVIA(
+  d: DeductionInput,
+  regime: Regime,
+  employerNps: number,
+  basicSalary: number,
+): { total: number; breakdown: LineItem[] } {
+  const breakdown: LineItem[] = [];
+
+  // 80CCD(2) — employer NPS. Allowed in BOTH regimes; the ceiling differs.
+  const npsRate =
+    regime === "new" ? LIMITS.s80CCD2_rate_new : LIMITS.s80CCD2_rate_old;
+  const npsCap = npsRate * num(basicSalary);
+  const nps2 = Math.min(num(employerNps), npsCap);
+  if (nps2 > 0) {
+    breakdown.push({
+      label: "80CCD(2) — employer NPS contribution",
+      amount: nps2,
+      note: `Capped at ${npsRate * 100}% of basic salary in the ${regime} regime`,
+    });
+  }
+
+  if (regime === "new") {
+    return { total: nps2, breakdown };
+  }
+
+  const c80 = Math.min(num(d.s80C), LIMITS.s80C);
+  if (c80 > 0)
+    breakdown.push({
+      label: "80C — EPF, ELSS, life insurance, tuition fees",
+      amount: c80,
+      note:
+        num(d.s80C) > LIMITS.s80C
+          ? `You entered ₹${inr(num(d.s80C))}; the ceiling is ₹1,50,000`
+          : undefined,
+    });
+
+  const ccd1b = Math.min(num(d.s80CCD1B), LIMITS.s80CCD1B);
+  if (ccd1b > 0)
+    breakdown.push({
+      label: "80CCD(1B) — your own NPS contribution",
+      amount: ccd1b,
+    });
+
+  const dSelf = Math.min(num(d.s80D_self), LIMITS.s80D_self);
+  const parentCap = d.s80D_parents_senior
+    ? LIMITS.s80D_parents_senior
+    : LIMITS.s80D_parents;
+  const dParents = Math.min(num(d.s80D_parents), parentCap);
+  if (dSelf + dParents > 0)
+    breakdown.push({
+      label: "80D — health insurance premium",
+      amount: dSelf + dParents,
+      note: `Self and family up to ₹${inr(LIMITS.s80D_self)}, parents up to ₹${inr(parentCap)}${
+        d.s80D_parents_senior ? " (senior citizen parents)" : ""
+      }`,
+    });
+
+  const ddb = Math.min(num(d.s80DDB), LIMITS.s80DDB);
+  if (ddb > 0)
+    breakdown.push({ label: "80DDB — specified medical treatment", amount: ddb });
+
+  const e80 = num(d.s80E);
+  if (e80 > 0)
+    breakdown.push({
+      label: "80E — interest on education loan",
+      amount: e80,
+      note: "No monetary ceiling; available for 8 assessment years",
+    });
+
+  const g80 = num(d.s80G);
+  if (g80 > 0) breakdown.push({ label: "80G — donations", amount: g80 });
+
+  const tta = Math.min(num(d.s80TTA), LIMITS.s80TTA);
+  if (tta > 0)
+    breakdown.push({
+      label: "80TTA — savings bank interest",
+      amount: tta,
+      note: "Ceiling ₹10,000, and it covers savings interest only — not fixed deposits",
+    });
+
+  const eeb = Math.min(num(d.s80EEB), LIMITS.s80EEB);
+  if (eeb > 0)
+    breakdown.push({ label: "80EEB — electric vehicle loan interest", amount: eeb });
+
+  const u80 = Math.min(num(d.s80U), LIMITS.s80U_severe);
+  if (u80 > 0)
+    breakdown.push({ label: "80U — taxpayer with a disability", amount: u80 });
+
+  const total = breakdown.reduce((sum, item) => sum + item.amount, 0);
+  return { total, breakdown };
+}
+
+/** ------------------------------------------------------------------
+ *  Section 87A rebate, including marginal relief under the new regime
+ *  ------------------------------------------------------------------ */
+export function computeRebate87A(
+  totalIncome: number,
+  taxBeforeRebate: number,
+  regime: Regime,
+  slabs: Slab[],
+) {
+  const rule = REBATE_87A[regime];
+
+  if (totalIncome <= rule.incomeCeiling) {
+    return {
+      rebate: Math.min(taxBeforeRebate, rule.maxRebate),
+      marginalRelief: 0,
+    };
+  }
+
+  if (!rule.marginalRelief) return { rebate: 0, marginalRelief: 0 };
+
+  // Marginal relief: the tax cannot exceed the income earned above the rebate
+  // ceiling. Someone at ₹12,10,000 should not pay more tax than the ₹10,000
+  // by which they crossed the line.
+  const excessIncome = totalIncome - rule.incomeCeiling;
+  const taxAtCeiling = applySlabs(rule.incomeCeiling, slabs).tax;
+  const rebateAtCeiling = Math.min(taxAtCeiling, rule.maxRebate);
+  const notionalTax = taxAtCeiling - rebateAtCeiling + excessIncome;
+
+  if (taxBeforeRebate > notionalTax) {
+    return { rebate: 0, marginalRelief: taxBeforeRebate - notionalTax };
+  }
+
+  return { rebate: 0, marginalRelief: 0 };
+}
+
+function surchargeRateFor(totalIncome: number, regime: Regime): number {
+  let rate = 0;
+  for (const band of SURCHARGE_BANDS) {
+    if (totalIncome > band.above) rate = band.rate;
+  }
+  if (regime === "new") rate = Math.min(rate, NEW_REGIME_MAX_SURCHARGE);
+  return rate;
+}
+
+/**
+ * Surcharge, with marginal relief at each threshold. Crossing ₹50,00,000 by
+ * ₹10,000 must never cost more than that ₹10,000, so the surcharge is trimmed
+ * back until that holds.
+ */
+function computeSurcharge(
+  totalIncome: number,
+  tax: number,
+  regime: Regime,
+  slabs: Slab[],
+): number {
+  const rate = surchargeRateFor(totalIncome, regime);
+  if (rate === 0) return 0;
+
+  let threshold = 0;
+  for (const band of SURCHARGE_BANDS) {
+    if (totalIncome > band.above) threshold = band.above;
+  }
+
+  const surcharge = tax * rate;
+
+  // Tax plus surcharge at the threshold itself, for comparison.
+  const taxAtThreshold = applySlabs(threshold, slabs).tax;
+  const surchargeAtThreshold =
+    taxAtThreshold * surchargeRateFor(threshold, regime);
+  const ceiling =
+    taxAtThreshold + surchargeAtThreshold + (totalIncome - threshold);
+
+  if (tax + surcharge > ceiling) {
+    return Math.max(0, ceiling - tax);
+  }
+  return surcharge;
+}
+
+/** ------------------------------------------------------------------
+ *  The whole computation
+ *  ------------------------------------------------------------------ */
+export function computeTax(
+  input: TaxpayerInput,
+  regimeOverride?: Regime,
+): TaxComputation {
+  const regime = regimeOverride ?? input.regime;
+  const s = input.salary;
+
+  const grossSalary =
+    num(s.basic) +
+    num(s.hra) +
+    num(s.specialAllowance) +
+    num(s.lta) +
+    num(s.otherAllowances) +
+    num(s.employerNps);
+
+  // --- Exempt allowances (old regime only) ---
+  const hraResult = computeHraExemption({
+    basic: num(s.basic),
+    hraReceived: num(s.hra),
+    rentPaidAnnual: num(input.hra.rentPaidAnnual),
+    metroCity: input.hra.metroCity,
+  });
+  const hraExemption =
+    regime === "old" && input.hra.claiming ? hraResult.exemption : 0;
+  const exemptAllowances = hraExemption;
+
+  const standardDeduction = Math.min(
+    STANDARD_DEDUCTION[regime],
+    clampMin0(grossSalary - exemptAllowances),
+  );
+  const professionalTax = regime === "old" ? num(s.professionalTax) : 0;
+
+  const incomeFromSalary = clampMin0(
+    grossSalary - exemptAllowances - standardDeduction - professionalTax,
+  );
+
+  // --- House property ---
+  const hp = computeHouseProperty(input.houseProperty, regime);
+  const incomeFromHouseProperty = hp.income;
+
+  // --- Other sources ---
+  const o = input.otherSources;
+  const incomeFromOtherSources =
+    num(o.savingsInterest) + num(o.fdInterest) + num(o.dividend) + num(o.other);
+
+  const grossTotalIncome =
+    incomeFromSalary + incomeFromHouseProperty + incomeFromOtherSources;
+
+  // --- Chapter VI-A ---
+  const via = computeChapterVIA(
+    input.deductions,
+    regime,
+    num(s.employerNps),
+    num(s.basic),
+  );
+  // Chapter VI-A can never take income below zero.
+  const chapterVIA = Math.min(via.total, clampMin0(grossTotalIncome));
+
+  const totalIncomeRaw = clampMin0(grossTotalIncome - chapterVIA);
+  // Total income is rounded off to the nearest ₹10 (Section 288A).
+  const totalIncome = Math.round(totalIncomeRaw / 10) * 10;
+
+  // --- Tax on total income ---
+  const slabs = slabsFor(regime, input.age);
+  const { tax: taxBeforeRebate, breakdown: slabBreakdown } = applySlabs(
+    totalIncome,
+    slabs,
+  );
+
+  const { rebate: rebate87A, marginalRelief } = computeRebate87A(
+    totalIncome,
+    taxBeforeRebate,
+    regime,
+    slabs,
+  );
+
+  const taxAfterRebate = clampMin0(taxBeforeRebate - rebate87A - marginalRelief);
+  const surcharge = computeSurcharge(totalIncome, taxAfterRebate, regime, slabs);
+  const cess = (taxAfterRebate + surcharge) * CESS_RATE;
+  const totalTaxLiability = r0(taxAfterRebate + surcharge + cess);
+
+  const tdsCredit = num(s.tdsDeducted) + num(input.tdsOnOtherIncome);
+  const advanceTax = num(input.advanceTaxPaid);
+  const selfAssessmentTax = num(input.selfAssessmentTaxPaid);
+
+  const balance = totalTaxLiability - tdsCredit - advanceTax - selfAssessmentTax;
+
+  return {
+    regime,
+    grossSalary,
+    exemptAllowances,
+    hraExemption,
+    standardDeduction,
+    professionalTax,
+    incomeFromSalary,
+    incomeFromHouseProperty,
+    incomeFromOtherSources,
+    grossTotalIncome,
+    chapterVIA,
+    chapterVIABreakdown: via.breakdown,
+    totalIncome,
+    taxBeforeRebate,
+    slabBreakdown,
+    rebate87A,
+    marginalRelief,
+    taxAfterRebate,
+    surcharge,
+    cess,
+    totalTaxLiability,
+    tdsCredit,
+    advanceTax,
+    selfAssessmentTax,
+    balance,
+    // Balances under ₹10 are ignored on both sides, as in practice.
+    refundDue: balance < -10 ? r0(-balance) : 0,
+    taxPayable: balance > 10 ? r0(balance) : 0,
+    effectiveRate: grossTotalIncome > 0 ? totalTaxLiability / grossTotalIncome : 0,
+  };
+}
+
+export type RegimeComparison = {
+  new: TaxComputation;
+  old: TaxComputation;
+  recommended: Regime;
+  saving: number;
+  /** What the old regime is sheltering that the new regime is not */
+  oldOnlyBenefit: number;
+};
+
+export function compareRegimes(input: TaxpayerInput): RegimeComparison {
+  const newR = computeTax(input, "new");
+  const oldR = computeTax(input, "old");
+  const recommended: Regime =
+    oldR.totalTaxLiability < newR.totalTaxLiability ? "old" : "new";
+  return {
+    new: newR,
+    old: oldR,
+    recommended,
+    saving: Math.abs(newR.totalTaxLiability - oldR.totalTaxLiability),
+    oldOnlyBenefit:
+      oldR.exemptAllowances +
+      oldR.chapterVIA +
+      oldR.professionalTax -
+      newR.chapterVIA,
+  };
+}
+
+/**
+ * The break-even shelter: how much old-regime-only relief — HRA exemption plus
+ * Chapter VI-A deductions — a taxpayer needs before the old regime beats the
+ * new one at the same income.
+ *
+ * Both sides are computed on the same income. The probe strips every
+ * old-regime-only shelter and then adds back a single uncapped deduction, so
+ * the answer is a clean rupee figure rather than an artefact of which sections
+ * happened to be filled in. 80CCD(2) is left alone because it applies in both
+ * regimes and is therefore not part of the trade-off.
+ */
+export function breakEvenDeductions(input: TaxpayerInput): number {
+  // The new regime ignores HRA and Chapter VI-A (other than 80CCD(2)), so its
+  // tax is the same with or without the probe's changes.
+  const newTax = computeTax(input, "new").totalTaxLiability;
+
+  const withShelter = (amount: number): TaxpayerInput => ({
+    ...input,
+    hra: { ...input.hra, claiming: false },
+    deductions: {
+      ...input.deductions,
+      s80C: 0,
+      s80CCD1B: 0,
+      s80D_self: 0,
+      s80D_parents: 0,
+      s80DDB: 0,
+      // 80E carries no ceiling, which makes it the right lever for a search.
+      s80E: amount,
+      s80G: 0,
+      s80TTA: 0,
+      s80EEB: 0,
+      s80U: 0,
+    },
+  });
+
+  const ceiling = Math.max(0, computeTax(withShelter(0), "old").grossTotalIncome);
+  if (computeTax(withShelter(ceiling), "old").totalTaxLiability > newTax) {
+    // Even wiping out the entire income does not get there — no break-even.
+    return Number.POSITIVE_INFINITY;
+  }
+
+  let lo = 0;
+  let hi = ceiling;
+  for (let i = 0; i < 44; i++) {
+    const mid = (lo + hi) / 2;
+    if (computeTax(withShelter(mid), "old").totalTaxLiability > newTax) lo = mid;
+    else hi = mid;
+  }
+  return Math.round(hi / 100) * 100;
+}

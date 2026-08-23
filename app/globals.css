@@ -1,26 +1,187 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Sarathi design system
+   Independent hackathon prototype. Deliberately NOT modelled on
+   the visual language of incometax.gov.in — warm paper base,
+   deep pine primary, editorial serif display type.
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  /* Surfaces — warm paper, not clinical white */
+  --paper: #faf7f2;
+  --surface: #ffffff;
+  --surface-sunk: #f2ede4;
+  --surface-raised: #fffdf9;
+
+  /* Ink */
+  --ink: #1a1d1a;
+  --ink-soft: #4a5250;
+  --ink-faint: #7b8482;
+
+  /* Lines */
+  --line: #e3dccf;
+  --line-strong: #cfc5b3;
+
+  /* Brand — deep pine */
+  --pine-50: #eaf3f0;
+  --pine-100: #cfe4dd;
+  --pine-400: #3d8272;
+  --pine: #1f5f52;
+  --pine-deep: #123d34;
+  --pine-ink: #113a32;
+
+  /* Accent — clay */
+  --clay-50: #fdf1e5;
+  --clay: #b96a25;
+  --clay-ink: #8a4d16;
+
+  /* Semantic */
+  --ok-50: #e9f4ec;
+  --ok: #2f6b45;
+  --warn-50: #fdf3e0;
+  --warn: #9a6a10;
+  --alert-50: #fceded;
+  --alert: #a52c26;
+  --info-50: #ecf0fa;
+  --info: #33478f;
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-lg: 22px;
+
+  --shadow-sm: 0 1px 2px rgba(26, 29, 26, 0.05);
+  --shadow: 0 2px 6px rgba(26, 29, 26, 0.06), 0 8px 24px -12px rgba(26, 29, 26, 0.16);
+  --shadow-lg: 0 4px 12px rgba(26, 29, 26, 0.08), 0 24px 56px -24px rgba(26, 29, 26, 0.28);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-sunk: var(--surface-sunk);
+  --color-raised: var(--surface-raised);
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-pine-50: var(--pine-50);
+  --color-pine-100: var(--pine-100);
+  --color-pine-400: var(--pine-400);
+  --color-pine: var(--pine);
+  --color-pine-ink: var(--pine-ink);
+
+  --color-clay-50: var(--clay-50);
+  --color-clay: var(--clay);
+  --color-clay-ink: var(--clay-ink);
+
+  --color-ok-50: var(--ok-50);
+  --color-ok: var(--ok);
+  --color-warn-50: var(--warn-50);
+  --color-warn: var(--warn);
+  --color-alert-50: var(--alert-50);
+  --color-alert: var(--alert);
+  --color-info-50: var(--info-50);
+  --color-info: var(--info);
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-fraunces);
+  --font-mono: var(--font-mono-face);
+
+  --radius-card: var(--radius);
+  --radius-pill: 999px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--line);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.18;
+  color: var(--ink);
+}
+
+/* Numbers should line up in tables and stat blocks */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--font-mono-face), ui-monospace, monospace;
+}
+
+/* Section eyebrow */
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Focus ring — one definition everywhere */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--pine-400);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Subtle paper texture on the app background */
+.paper-grain {
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(31, 95, 82, 0.045), transparent 42%),
+    radial-gradient(circle at 88% 4%, rgba(185, 106, 37, 0.05), transparent 38%);
+}
+
+/* Scrollbars inside panels */
+.thin-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+.thin-scroll::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-rise { animation: rise 0.22s ease-out both; }
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.animate-pulse-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }
