@@ -278,8 +278,12 @@ function runTool(
       const amount = Math.round(raw);
 
       // Idempotent: setting a section to what it already holds is a no-op, so
-      // the same call twice never double-counts.
+      // the same call twice never double-counts. Answering "nothing under this
+      // one" when it is already zero still counts as answering it, though —
+      // otherwise the deductions step could never finish.
       if (store.deductions[sectionKey] === amount) {
+        const asked = discoveryQuestions.find((q) => q.section === sectionKey);
+        if (asked) store.markDiscoveryAnswered(asked.id);
         return {
           name: call.name,
           ok: true,
@@ -287,6 +291,7 @@ function runTool(
           result: {
             ok: true,
             noChange: true,
+            questionAnswered: Boolean(asked),
             section: str(call.args.section),
             amountEntered: amount,
           },
@@ -591,6 +596,24 @@ function runTool(
 
     /* ---------------------------------------------------------- */
     case "confirm_regime": {
+      // A guard rail, not a hint. Earlier in a long run the current regime may
+      // genuinely have been the cheaper one, and the model can act on that
+      // stale conclusion several rounds later — by which point the deductions
+      // have changed the answer. Refusing is the only thing that reliably
+      // stops a taxpayer being locked into the more expensive regime.
+      const check = compareRegimes(toTaxpayerInput(store));
+      if (check.recommended !== store.regime && check.saving > 0) {
+        return {
+          name: call.name,
+          ok: false,
+          summary: `Refused — the ${check.recommended} regime is ₹${inrPlain(check.saving)} cheaper`,
+          result: {
+            ok: false,
+            error: `The ${check.recommended} regime costs ₹${inrPlain(check.saving)} less on the current figures. Confirming the ${store.regime} regime would leave the taxpayer worse off.`,
+            suggestion: `Call switch_regime with regime="${check.recommended}", then confirm_regime.`,
+          },
+        };
+      }
       if (store.regimeChosenExplicitly) {
         return {
           name: call.name,

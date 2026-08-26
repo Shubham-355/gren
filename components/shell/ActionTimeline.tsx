@@ -190,6 +190,7 @@ export function TimelineRail({ squeezed }: { squeezed?: boolean }) {
             {count} {count === 1 ? "change" : "changes"}
           </span>
         </div>
+        <UndoAllBar />
 
         <div className="thin-scroll flex-1 overflow-y-auto px-4 py-4">
           <TimelineList compact />
@@ -223,6 +224,36 @@ export function TimelineRail({ squeezed }: { squeezed?: boolean }) {
   );
 }
 
+/**
+ * After Saathi runs the whole journey there can be a dozen of its changes
+ * standing. Undoing them one at a time is not a real way out, so the way back
+ * is offered once, at the top, wherever the timeline appears.
+ */
+function UndoAllBar() {
+  const undoAllBy = useAppStore((s) => s.undoAllBy);
+  const reversible = useAppStore(
+    (s) =>
+      s.actionLog.filter((a) => a.actor === "copilot" && a.undo && !a.undone)
+        .length,
+  );
+
+  if (reversible < 2) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-petrol-edge bg-petrol-soft px-4 py-2.5">
+      <span className="text-[12.5px] leading-snug text-[color:var(--petrol-400)]">
+        Saathi made {reversible} of these
+      </span>
+      <button
+        onClick={() => undoAllBy("copilot")}
+        className="shrink-0 text-[12.5px] font-semibold text-[color:var(--petrol)] underline underline-offset-2"
+      >
+        Undo them all
+      </button>
+    </div>
+  );
+}
+
 /** The phone version: a bottom sheet raised from the header button. */
 export function TimelineSheet() {
   const open = useAppStore((s) => s.timelineOpen);
@@ -251,6 +282,9 @@ export function TimelineSheet() {
               Close
             </button>
           </div>
+        </div>
+        <div className="mx-5 mt-4 overflow-hidden rounded-[var(--radius-sm)]">
+          <UndoAllBar />
         </div>
         <div className="px-5 pt-4">
           <TimelineList />

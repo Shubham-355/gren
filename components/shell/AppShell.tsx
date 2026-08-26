@@ -48,6 +48,24 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (hydrated && !loggedIn) router.replace("/login");
   }, [hydrated, loggedIn, router]);
 
+  // Ctrl/Cmd+K from anywhere. Ignored while typing, so it never steals a
+  // keystroke from a rupee field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "k" || !(e.metaKey || e.ctrlKey)) return;
+      const el = document.activeElement;
+      const typing =
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        (el as HTMLElement | null)?.isContentEditable;
+      if (typing) return;
+      e.preventDefault();
+      setCopilotOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setCopilotOpen]);
+
   const daysLeft = daysUntil(FILING_DEADLINE);
 
   return (
@@ -145,6 +163,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <CopilotStar size={20} />
           <span className="text-[14.5px] font-medium">Ask</span>
+          <span className="mono hidden rounded bg-white/15 px-1.5 py-0.5 text-[11px] text-white/70 lg:inline">
+            ⌘K
+          </span>
         </button>
 
         <CopilotPanel />

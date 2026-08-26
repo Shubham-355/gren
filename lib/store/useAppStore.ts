@@ -89,6 +89,8 @@ export type CopilotMessage = {
   role: "user" | "assistant";
   text: string;
   at: string;
+  /** still working — more actions may still land on this message */
+  pending?: boolean;
   /** actions the model actually performed on this turn */
   actions?: {
     tool: string;
@@ -311,9 +313,12 @@ export type AppState = {
   setTimelineOpen: (open: boolean) => void;
   setOpenWhy: (id: string | null) => void;
   pushCopilotMessage: (message: CopilotMessage) => void;
+  /** used to stream a long agent run into the transcript as it happens */
+  updateCopilotMessage: (id: string, patch: Partial<CopilotMessage>) => void;
   clearCopilot: () => void;
   logAction: (entry: Omit<ActionLogEntry, "id" | "at">) => void;
-  undoAction: (id: string) => ToolResult;
+  undoAction: (id: string, options?: { quiet?: boolean }) => ToolResult;
+  undoAllBy: (actor: ActionLogEntry["actor"]) => ToolResult;
 
   requestConfirmation: (
     confirmation: Omit<PendingConfirmation, "createdAt" | "acknowledged">,
@@ -941,7 +946,7 @@ export const useAppStore = create<AppState>()(
        * the timeline entry undone rather than deleting it — the record of what
        * happened is part of the point.
        */
-      undoAction: (id) => {
+      undoAction: (id, options) => {
         const entry = get().actionLog.find((a) => a.id === id);
         if (!entry?.undo) {
           return { ok: false, summary: "There is nothing to undo there." };
@@ -1005,7 +1010,31 @@ export const useAppStore = create<AppState>()(
           ),
         }));
         const summary = `Undone — ${entry.summary.charAt(0).toLowerCase()}${entry.summary.slice(1)}`;
-        get().pushToast({ tone: "info", title: "Undone", body: entry.summary });
+        if (!options?.quiet) {
+          get().pushToast({ tone: "info", title: "Undone", body: entry.summary });
+        }
+        return { ok: true, summary };
+      },
+
+      /**
+       * After a long agent run, undoing twelve things one at a time is not a
+       * real way out. This reverses everything that actor still has standing,
+       * newest first so each undo restores the value the one before it saw.
+       */
+      undoAllBy: (actor) => {
+        const reversible = get().actionLog.filter(
+          (a) => a.actor === actor && a.undo && !a.undone,
+        );
+        if (reversible.length === 0) {
+          return { ok: false, summary: "There is nothing left to undo." };
+        }
+        for (const entry of reversible) get().undoAction(entry.id, { quiet: true });
+        const summary = `Undid ${reversible.length} ${reversible.length === 1 ? "change" : "changes"}`;
+        get().pushToast({
+          tone: "info",
+          title: summary,
+          body: "Your return is back where it was.",
+        });
         return { ok: true, summary };
       },
 
@@ -1040,6 +1069,13 @@ export const useAppStore = create<AppState>()(
       pushCopilotMessage: (message) =>
         set((s) => ({ copilotMessages: [...s.copilotMessages, message] })),
 
+      updateCopilotMessage: (id, patch) =>
+        set((s) => ({
+          copilotMessages: s.copilotMessages.map((m) =>
+            m.id === id ? { ...m, ...patch } : m,
+          ),
+        })),
+
       clearCopilot: () => set({ copilotMessages: [] }),
 
       logAction: (entry) =>
@@ -1052,7 +1088,12 @@ export const useAppStore = create<AppState>()(
 
       pushToast: (toast) => {
         const id = rid();
-        set((s) => ({ toasts: [...s.toasts, { ...toast, id }] }));
+        // An agent run can fire a dozen of these in a few seconds. Keeping only
+        // the newest few stops the screen filling with cards nobody reads —
+        // the full record is in the timeline either way.
+        set((s) => ({
+          toasts: [...s.toasts, { ...toast, id }].slice(-3),
+        }));
         if (typeof window !== "undefined") {
           window.setTimeout(() => get().dismissToast(id), 5200);
         }

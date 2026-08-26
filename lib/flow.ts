@@ -1,3 +1,4 @@
+import { discoveryQuestions } from "@/lib/data/discovery";
 import type { AppState } from "@/lib/store/useAppStore";
 import { pendingMismatches } from "@/lib/store/useAppStore";
 
@@ -113,7 +114,10 @@ export function stepDone(id: FlowStepId, s: AppState): boolean {
     case "reconcile":
       return s.form16Imported && pendingMismatches(s).length === 0;
     case "deductions":
-      return s.discoveryAnswered.length > 0;
+      // Every question, not just the first one. Marking the step done after a
+      // single answer sent the dashboard — and the copilot's own sense of what
+      // is left — on to the regime while seven questions were still open.
+      return s.discoveryAnswered.length >= discoveryQuestions.length;
     case "regime":
       return s.regimeChosenExplicitly;
     case "review":

@@ -282,6 +282,11 @@ function QuestionBody({
     [state, question.section, question.suggested],
   );
 
+  // The honest figure to show is what they actually paid; the honest thing to
+  // say next to it is what the Act will actually allow.
+  const capped =
+    question.ceiling !== undefined && question.suggested > question.ceiling;
+
   function record(value: number) {
     state.setDeduction(question.section, value);
     state.markDiscoveryAnswered(question.id);
@@ -325,7 +330,14 @@ function QuestionBody({
               onClick={() => record(question.suggested)}
               className="flex h-[56px] items-center justify-between gap-3.5 rounded-[var(--radius-sm)] bg-[color:var(--plum)] px-[26px] text-[16.5px] font-medium text-white transition-colors hover:bg-[color:var(--plum-deep)] sm:justify-start"
             >
-              <span>Yes — {inr(question.suggested)}</span>
+              <span>
+                Yes — {inr(question.suggested)}
+                {capped ? (
+                  <span className="ml-2 text-[13.5px] font-normal text-white/[0.72]">
+                    counts as {inr(question.ceiling!)}
+                  </span>
+                ) : null}
+              </span>
               {preview > 0 ? (
                 <span className="tnum text-[14px] text-white/[0.72]">
                   saves {inr(preview)}

@@ -72,6 +72,7 @@ export function CopilotPanel() {
   const setOpen = useAppStore((s) => s.setCopilotOpen);
   const messages = useAppStore((s) => s.copilotMessages);
   const push = useAppStore((s) => s.pushCopilotMessage);
+  const update = useAppStore((s) => s.updateCopilotMessage);
   const clear = useAppStore((s) => s.clearCopilot);
   const actionCount = useAppStore(
     (s) => s.actionLog.filter((a) => a.actor === "copilot" && !a.undone).length,
@@ -93,15 +94,22 @@ export function CopilotPanel() {
     return segment[segment.length - 1] || "dashboard";
   }, [pathname]);
 
+  // Actions land on the last message rather than creating new ones, so the
+  // message count alone is not enough to keep the view pinned to the bottom.
+  const streamedSteps = messages[messages.length - 1]?.actions?.length ?? 0;
+
   useEffect(() => {
     if (open) {
       scrollRef.current?.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: "smooth",
       });
-      inputRef.current?.focus();
     }
-  }, [open, messages.length, busy]);
+  }, [open, messages.length, streamedSteps, busy]);
+
+  useEffect(() => {
+    if (open && !busy) inputRef.current?.focus();
+  }, [open, busy]);
 
   // Escape closes the panel.
   useEffect(() => {
@@ -139,6 +147,18 @@ export function CopilotPanel() {
       const actions: NonNullable<CopilotMessage["actions"]> = [];
       let reply: ChatResponse | null = null;
 
+      // A long run used to sit behind a spinner for half a minute. The reply
+      // bubble is created up front and filled in as each round lands, so the
+      // work is visible while it happens rather than only once it is over.
+      const replyId = rid();
+      push({
+        id: replyId,
+        role: "assistant",
+        text: "",
+        at: new Date().toISOString(),
+        pending: true,
+      });
+
       // The agent loop. Each pass the model either asks for tools or answers;
       // tools are run against the real store and the results fed back, so a
       // single instruction can walk several steps of the journey.
@@ -152,12 +172,10 @@ export function CopilotPanel() {
         });
 
         if (response.error) {
-          push({
-            id: rid(),
-            role: "assistant",
+          update(replyId, {
             text: response.error,
-            at: new Date().toISOString(),
             actions: actions.length ? actions : undefined,
+            pending: false,
             error: true,
           });
           return;
@@ -186,18 +204,19 @@ export function CopilotPanel() {
             response: o.result,
           })),
         });
+
+        // Show what just happened before going back for the next round.
+        update(replyId, { actions: [...actions] });
       }
 
-      push({
-        id: rid(),
-        role: "assistant",
+      update(replyId, {
         text:
           reply?.text ||
           (actions.length
             ? actions.map((a) => a.summary).join(". ")
             : "I did not have anything useful to add there."),
-        at: new Date().toISOString(),
         actions: actions.length ? actions : undefined,
+        pending: false,
       });
     } catch (error) {
       push({
@@ -205,8 +224,8 @@ export function CopilotPanel() {
         role: "assistant",
         text:
           error instanceof Error
-            ? `I could not reach my service: ${error.message}. Nothing in your return was changed — the screens still work on their own.`
-            : "I could not reach my service. Nothing in your return was changed.",
+            ? `I could not reach my service: ${error.message}. Anything already done is listed above and can be undone.`
+            : "I could not reach my service. Anything already done is listed above and can be undone.",
         at: new Date().toISOString(),
         error: true,
       });
@@ -316,12 +335,7 @@ export function CopilotPanel() {
             <MessageBubble key={m.id} message={m} />
           ))}
 
-          {busy ? (
-            <div className="flex items-center gap-2 text-[12.5px] text-ink-faint">
-              <span className="animate-pulse-dot">●</span> thinking, and checking
-              your numbers
-            </div>
-          ) : null}
+
         </div>
 
         {messages.length > 0 && !busy ? (
@@ -399,6 +413,25 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
     );
   }
 
+  // While a run is in flight the bubble is a live status line, not an empty box.
+  if (message.pending && !message.text) {
+    return (
+      <div className="animate-rise space-y-2.5">
+        <div
+          className="flex max-w-[92%] items-center gap-2 rounded-[16px] rounded-bl-[4px] border border-petrol-edge bg-white px-3.5 py-3 text-[14px] text-[color:var(--petrol-text)]"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="animate-pulse-dot">●</span>
+          {message.actions?.length
+            ? `Working — ${message.actions.length} ${message.actions.length === 1 ? "step" : "steps"} done so far`
+            : "Reading your return"}
+        </div>
+        {message.actions?.length ? <ActionList message={message} /> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="animate-rise space-y-2.5">
       <div
@@ -418,21 +451,44 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
         )}
       </div>
 
-      {message.actions?.length ? (
-        <div className="rounded-[14px] bg-petrol-50 px-3.5 py-3">
-          <div className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[color:var(--petrol-400)]">
-            Actions taken
-          </div>
-          <ul className="mt-2 space-y-2">
-            {message.actions.map((a, i) => (
-              <ActionRow key={i} action={a} />
-            ))}
-          </ul>
-          <p className="mt-2.5 text-[11.5px] leading-snug text-[color:var(--petrol-400)]">
-            Estimated from what you have told me so far. Everything reversible
-            is marked so.
-          </p>
-        </div>
+      {message.actions?.length ? <ActionList message={message} /> : null}
+    </div>
+  );
+}
+
+function ActionList({ message }: { message: CopilotMessage }) {
+  const undoAllBy = useAppStore((s) => s.undoAllBy);
+  const reversible = useAppStore(
+    (s) =>
+      s.actionLog.filter((a) => a.actor === "copilot" && a.undo && !a.undone)
+        .length,
+  );
+
+  return (
+    <div className="rounded-[14px] bg-petrol-50 px-3.5 py-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[color:var(--petrol-400)]">
+          Actions taken
+        </span>
+        {reversible > 1 && !message.pending ? (
+          <button
+            onClick={() => undoAllBy("copilot")}
+            className="text-[12px] font-semibold text-[color:var(--petrol)] underline underline-offset-2"
+          >
+            Undo all {reversible}
+          </button>
+        ) : null}
+      </div>
+      <ul className="mt-2 space-y-2">
+        {message.actions?.map((a, i) => (
+          <ActionRow key={i} action={a} />
+        ))}
+      </ul>
+      {!message.pending ? (
+        <p className="mt-2.5 text-[11.5px] leading-snug text-[color:var(--petrol-400)]">
+          Estimated from what you have told me so far. Everything reversible is
+          marked so.
+        </p>
       ) : null}
     </div>
   );
