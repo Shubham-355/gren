@@ -14,14 +14,20 @@ import {
   buildPaymentConfirmation,
   buildSubmissionConfirmation,
 } from "@/lib/confirmations";
+import { discoveryQuestions } from "@/lib/data/discovery";
+import { nextStep } from "@/lib/flow";
+import { form16, grossSalaryFromForm16 } from "@/lib/data/seed";
 import {
+  INCOME_FIELDS,
+  readIncomeField,
   refundStage,
   toTaxpayerInput,
   useAppStore,
+  type IncomeField,
   type MismatchResolution,
 } from "@/lib/store/useAppStore";
 import type { DeductionInput } from "@/lib/tax/compute";
-import { computeTax } from "@/lib/tax/compute";
+import { compareRegimes, computeTax } from "@/lib/tax/compute";
 import { slug } from "@/components/ui";
 
 const SECTION_MAP: Record<string, keyof DeductionInput> = {
@@ -89,9 +95,82 @@ export function applyTool(
     };
   }
   const topAfter = useAppStore.getState().actionLog[0];
-  return topAfter && topAfter.id !== topBefore
-    ? { ...outcome, logId: topAfter.id }
-    : outcome;
+  const withLog =
+    topAfter && topAfter.id !== topBefore
+      ? { ...outcome, logId: topAfter.id }
+      : outcome;
+
+  // Finishing one step is the moment to say what the next one is. Smaller
+  // models will happily do a single tool call and then report back; handing
+  // them the next move inside the result they are already reading is what
+  // turns "just file it for me" into the whole journey rather than one step.
+  return outcome.ok
+    ? { ...withLog, result: { ...withLog.result, ...journeyHint() } }
+    : withLog;
+}
+
+/** What to do next, phrased as an instruction the model can act on. */
+function journeyHint(): Record<string, unknown> {
+  const state = useAppStore.getState();
+  const step = nextStep(state);
+
+  const pendingIds = Object.values(state.reconciliation)
+    .filter((r) => r.resolution === "pending")
+    .map((r) => r.id);
+  const unanswered = discoveryQuestions.filter(
+    (q) => !state.discoveryAnswered.includes(q.id),
+  );
+
+  const keepGoing = (whatToDoNext: string) => ({
+    nextStep: {
+      step: step.id,
+      whatToDoNext,
+      instruction:
+        "Do this now, in this same turn. Do not stop to report progress — the user asked for the whole thing.",
+    },
+  });
+
+  switch (step.id) {
+    case "income":
+      return keepGoing("Call import_form16 — the return has no income in it yet.");
+    case "reconcile":
+      return keepGoing(
+        `Call resolve_mismatch for each of these still-open ids: ${pendingIds.join(", ")}. Use resolution "accept" where the reported figure is genuinely the taxpayer's, and "belongs_to_other_pan" for the joint account they are only the second holder of.`,
+      );
+    case "deductions":
+      return keepGoing(
+        `Answer the remaining deduction questions with add_deduction: ${unanswered
+          .map((q) => `${q.sectionLabel} (₹${q.suggested} on record)`)
+          .join("; ")}. Pass 0 for any the taxpayer has nothing under.`,
+      );
+    case "regime": {
+      // Which regime is cheaper is arithmetic, not judgement. Handing the model
+      // the answer and the exact call to make stops it leaving the taxpayer on
+      // the more expensive one, which is what happened when this was phrased as
+      // "switch if the other is cheaper".
+      const comparison = compareRegimes(toTaxpayerInput(state));
+      if (comparison.recommended !== state.regime && comparison.saving > 0) {
+        return keepGoing(
+          `The ${comparison.recommended} regime is cheaper by ₹${inrPlain(comparison.saving)} on these exact figures. Call switch_regime with regime="${comparison.recommended}" now. Do not call confirm_regime instead.`,
+        );
+      }
+      return keepGoing(
+        `The ${state.regime} regime is already the cheaper one. Call confirm_regime to lock it in.`,
+      );
+    }
+    case "review":
+      return keepGoing("Call prepare_submission to assemble the return.");
+    default:
+      return {
+        nextStep: {
+          step: step.id,
+          whatToDoNext:
+            "Nothing further you can do. Filing and verifying are the user's tap.",
+          instruction:
+            "Stop calling tools. Tell the user what you did and that the card on screen is theirs to confirm.",
+        },
+      };
+  }
 }
 
 function runTool(
@@ -215,6 +294,12 @@ function runTool(
       }
 
       store.setDeduction(sectionKey, amount, "copilot");
+
+      // Answering through the copilot has to advance the guided run as well,
+      // otherwise the deductions step never finishes and the dashboard keeps
+      // pointing back at a question the user has already answered.
+      const question = discoveryQuestions.find((q) => q.section === sectionKey);
+      if (question) store.markDiscoveryAnswered(question.id);
 
       const after = computeTax(toTaxpayerInput(useAppStore.getState()));
       const applied = after.chapterVIABreakdown.find((b) =>
@@ -402,6 +487,131 @@ function runTool(
             state.profile.bankAccounts.find((b) => b.nominatedForRefund)?.bank ??
             null,
           note: "Stage timings in this prototype are simulated, not a real CPC feed.",
+        },
+      };
+    }
+
+    /* ---------------------------------------------------------- */
+    case "import_form16": {
+      if (store.form16Imported) {
+        return {
+          name: call.name,
+          ok: true,
+          summary: "Form 16 was already imported",
+          result: {
+            ok: true,
+            noChange: true,
+            employer: form16.employer.name,
+            grossSalary: grossSalaryFromForm16,
+            tdsAlreadyDeducted: form16.tdsDeducted,
+          },
+        };
+      }
+      store.importForm16("copilot");
+      const after = computeTax(toTaxpayerInput(useAppStore.getState()));
+      const summary = `Imported the Form 16 from ${form16.employer.name}`;
+      store.pushToast({
+        tone: "copilot",
+        title: "Form 16 imported",
+        body: `Gross salary ₹${inrPlain(grossSalaryFromForm16)}, with ₹${inrPlain(form16.tdsDeducted)} already deducted.`,
+      });
+      return {
+        name: call.name,
+        ok: true,
+        summary,
+        result: {
+          ok: true,
+          employer: form16.employer.name,
+          grossSalary: grossSalaryFromForm16,
+          tdsAlreadyDeducted: form16.tdsDeducted,
+          newGrossTotalIncome: after.grossTotalIncome,
+          newTotalTax: after.totalTaxLiability,
+          newRefundDue: after.refundDue,
+        },
+      };
+    }
+
+    /* ---------------------------------------------------------- */
+    case "set_income": {
+      const field = str(call.args.field) as IncomeField;
+      if (!INCOME_FIELDS[field]) {
+        return {
+          name: call.name,
+          ok: false,
+          summary: `"${str(call.args.field)}" is not an income figure this platform tracks.`,
+          result: {
+            ok: false,
+            error: `Unknown field. Valid: ${Object.keys(INCOME_FIELDS).join(", ")}`,
+          },
+        };
+      }
+      const raw = numArg(call.args.amount);
+      if (!Number.isFinite(raw) || raw < 0 || raw > 500_000_000) {
+        return {
+          name: call.name,
+          ok: false,
+          summary: `₹${raw} is not a usable amount for ${INCOME_FIELDS[field].label}.`,
+          result: {
+            ok: false,
+            error:
+              "amount must be a non-negative number of rupees below ₹50,00,00,000.",
+            suggestion: "Ask the user what the figure actually is.",
+          },
+        };
+      }
+      const amount = Math.round(raw);
+      if (readIncomeField(store, field) === amount) {
+        return {
+          name: call.name,
+          ok: true,
+          summary: `${INCOME_FIELDS[field].label} was already ₹${inrPlain(amount)}`,
+          result: { ok: true, noChange: true, field, amount },
+        };
+      }
+
+      store.setIncomeField(field, amount, "copilot");
+      const after = computeTax(toTaxpayerInput(useAppStore.getState()));
+      const summary = `Set ${INCOME_FIELDS[field].label} to ₹${inrPlain(amount)}`;
+      store.pushToast({ tone: "copilot", title: summary });
+      return {
+        name: call.name,
+        ok: true,
+        summary,
+        result: {
+          ok: true,
+          field,
+          amount,
+          newGrossTotalIncome: after.grossTotalIncome,
+          newTotalTax: after.totalTaxLiability,
+          newRefundDue: after.refundDue,
+          newTaxPayable: after.taxPayable,
+        },
+      };
+    }
+
+    /* ---------------------------------------------------------- */
+    case "confirm_regime": {
+      if (store.regimeChosenExplicitly) {
+        return {
+          name: call.name,
+          ok: true,
+          summary: `The ${store.regime} regime is already confirmed`,
+          result: { ok: true, noChange: true, regime: store.regime },
+        };
+      }
+      store.confirmRegime("copilot");
+      const comparison = compareRegimes(toTaxpayerInput(useAppStore.getState()));
+      const summary = `Confirmed the ${store.regime} regime`;
+      store.pushToast({ tone: "copilot", title: summary });
+      return {
+        name: call.name,
+        ok: true,
+        summary,
+        result: {
+          ok: true,
+          regime: store.regime,
+          isTheCheaperOne: comparison.recommended === store.regime,
+          saving: comparison.saving,
         },
       };
     }

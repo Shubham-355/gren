@@ -468,7 +468,7 @@ export default function FilingPage() {
                 <path d="M12 3.5l2.1 4.9 5.4.5-4.1 3.5 1.2 5.2L12 14.9l-4.6 2.7 1.2-5.2-4.1-3.5 5.4-.5z" />
               </svg>
               <p className="text-[13.5px] leading-relaxed text-[color:var(--petrol-text)]">
-                The copilot made {copilotEdits}{" "}
+                Saathi made {copilotEdits}{" "}
                 {copilotEdits === 1 ? "change" : "changes"} to this return. Every
                 one is listed in the activity timeline, and every one can still
                 be undone.

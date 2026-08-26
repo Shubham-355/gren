@@ -1,6 +1,13 @@
 "use client";
 
-import { aisEntries, notices as seededNotices } from "@/lib/data/seed";
+import { discoveryQuestions } from "@/lib/data/discovery";
+import {
+  aisEntries,
+  form16,
+  grossSalaryFromForm16,
+  notices as seededNotices,
+} from "@/lib/data/seed";
+import { FLOW_STEPS, nextStep, stepDone } from "@/lib/flow";
 import { inrPlain } from "@/lib/format";
 import {
   pendingMismatches,
@@ -59,6 +66,22 @@ export function buildScreenContext(state: AppState, pathname: string) {
       module: moduleFromPath(pathname),
     },
 
+    /**
+     * Where the user is in the guided journey. This is what lets the copilot
+     * drive rather than narrate: it can see which step is unfinished and reach
+     * for the tool that finishes it.
+     */
+    journey: {
+      nextStep: nextStep(state).id,
+      steps: FLOW_STEPS.map((step) => ({
+        id: step.id,
+        label: step.label,
+        done: stepDone(step.id, state),
+      })),
+      order:
+        "income -> reconcile -> deductions -> regime -> review -> submit -> verify -> refund",
+    },
+
     taxpayer: {
       name: state.profile.name,
       age: state.profile.age,
@@ -72,6 +95,14 @@ export function buildScreenContext(state: AppState, pathname: string) {
 
     income: {
       form16Imported: state.form16Imported,
+      form16Available: {
+        employer: form16.employer.name,
+        grossSalary: grossSalaryFromForm16,
+        tdsAlreadyDeducted: form16.tdsDeducted,
+        note: state.form16Imported
+          ? "Already imported."
+          : "Not imported yet — call import_form16. Nothing in this return can be computed until it is.",
+      },
       grossSalary: current.grossSalary,
       salaryBreakup: state.salary,
       housePropertyDeclared: state.houseProperty.enabled,
@@ -97,6 +128,27 @@ export function buildScreenContext(state: AppState, pathname: string) {
       })),
       rawEntries: state.deductions,
       hraExemption: current.hraExemption,
+      /**
+       * The guided-discovery script, with the figure already on record against
+       * this PAN for each one. The copilot can answer these directly with
+       * add_deduction instead of walking the user through eight screens.
+       */
+      questions: discoveryQuestions.map((q) => ({
+        id: q.id,
+        asks: q.question,
+        section: q.sectionLabel,
+        sectionArgument: SECTION_ARGUMENTS[q.section] ?? q.sectionLabel,
+        amountOnRecord:
+          q.id === "savings-interest"
+            ? state.otherSources.savingsInterest
+            : q.suggested,
+        ceiling: q.ceiling ?? null,
+        answered: state.discoveryAnswered.includes(q.id),
+        currentlyClaimed: state.deductions[q.section],
+      })),
+      unansweredQuestions: discoveryQuestions.filter(
+        (q) => !state.discoveryAnswered.includes(q.id),
+      ).length,
       noteIfNewRegime:
         state.regime === "new"
           ? "Only 80CCD(2) and the standard deduction apply under the new regime; other sections are recorded but have no effect until the regime is switched."
@@ -173,6 +225,24 @@ export function buildScreenContext(state: AppState, pathname: string) {
   };
 }
 
+/**
+ * The discovery script stores store-level section keys; the add_deduction tool
+ * takes the human section name. This is the bridge, so the copilot is told the
+ * exact argument to pass rather than being left to guess it.
+ */
+const SECTION_ARGUMENTS: Record<string, string> = {
+  s80C: "80C",
+  s80CCD1B: "80CCD(1B)",
+  s80D_self: "80D_self",
+  s80D_parents: "80D_parents",
+  s80DDB: "80DDB",
+  s80E: "80E",
+  s80G: "80G",
+  s80TTA: "80TTA",
+  s80EEB: "80EEB",
+  s80U: "80U",
+};
+
 export function refundStageMeaning(stage: string): string {
   switch (stage) {
     case "not-filed":
@@ -203,6 +273,35 @@ export function summariseContext(ctx: ScreenContext): string {
   lines.push(
     `Assessment Year ${ctx.assessmentYear} (FY ${ctx.financialYear}); due date ${ctx.filingDeadline}; today is ${ctx.today}.`,
   );
+  lines.push(
+    `JOURNEY: the next unfinished step is "${ctx.journey.nextStep}". Done so far: ${
+      ctx.journey.steps
+        .filter((s) => s.done)
+        .map((s) => s.label)
+        .join(", ") || "nothing yet"
+    }. Still to do: ${
+      ctx.journey.steps
+        .filter((s) => !s.done)
+        .map((s) => s.label)
+        .join(", ") || "nothing"
+    }.`,
+  );
+  if (!ctx.income.form16Imported) {
+    lines.push(
+      `The Form 16 from ${ctx.income.form16Available.employer} has NOT been imported yet — gross salary ₹${inrPlain(ctx.income.form16Available.grossSalary)}, ₹${inrPlain(ctx.income.form16Available.tdsAlreadyDeducted)} already deducted. Call import_form16 before anything else.`,
+    );
+  }
+  if (ctx.deductions.unansweredQuestions > 0) {
+    lines.push(
+      `${ctx.deductions.unansweredQuestions} deduction question(s) unanswered: ${ctx.deductions.questions
+        .filter((q) => !q.answered)
+        .map(
+          (q) =>
+            `${q.sectionArgument} (${q.asks}) — ₹${inrPlain(q.amountOnRecord)} on record`,
+        )
+        .join("; ")}.`,
+    );
+  }
   lines.push(
     `Regime selected: ${ctx.regime.selected}. Tax under new: ₹${inrPlain(ctx.regime.taxUnderNew)}. Under old: ₹${inrPlain(ctx.regime.taxUnderOld)}. Cheaper: ${ctx.regime.recommended}, by ₹${inrPlain(ctx.regime.savingFromRecommended)}.`,
   );

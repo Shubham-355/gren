@@ -17,7 +17,7 @@ import { useAppStore, type ActionLogEntry } from "@/lib/store/useAppStore";
 const actorStyle = {
   you: { label: "You", dot: "bg-[color:var(--plum)]", text: "text-[color:var(--plum)]" },
   copilot: {
-    label: "Copilot",
+    label: "Saathi",
     dot: "bg-[color:var(--petrol)]",
     text: "text-[color:var(--petrol)]",
   },
@@ -144,7 +144,7 @@ export function TimelineList({
   if (entries.length === 0) {
     return (
       <p className="px-1 py-4 text-[13px] leading-relaxed text-ink-faint">
-        Nothing has changed yet. Every edit you or the copilot makes appears
+        Nothing has changed yet. Every edit you or Saathi makes appears
         here, with a way to undo it.
       </p>
     );
@@ -211,11 +211,11 @@ export function TimelineRail({ squeezed }: { squeezed?: boolean }) {
               </svg>
             </span>
             <span className="text-[13.5px] font-semibold text-[color:var(--petrol-ink)]">
-              Open copilot
+              Open Saathi
             </span>
           </span>
           <span className="mt-2 block text-[11.5px] leading-snug text-[color:var(--petrol-400)]">
-            AI copilot — review anything it changes before you confirm.
+            Saathi is an AI — review anything it changes before you confirm.
           </span>
         </button>
       </div>

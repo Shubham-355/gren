@@ -10,9 +10,10 @@
  * Risk tiers (§5.2):
  *   Tier 1 — silent and logged:      navigate_to, explain_term,
  *                                    check_refund_status
- *   Tier 2 — done, shown, undoable:  switch_regime, add_deduction,
- *                                    resolve_mismatch, raise_grievance,
- *                                    prepare_submission
+ *   Tier 2 — done, shown, undoable:  import_form16, set_income,
+ *                                    switch_regime, add_deduction,
+ *                                    resolve_mismatch, confirm_regime,
+ *                                    raise_grievance, prepare_submission
  *   Tier 3 — needs an on-screen tap: submit_return, initiate_evc,
  *                                    initiate_payment
  *
@@ -61,6 +62,26 @@ export const DEDUCTION_SECTIONS = [
 ] as const;
 
 export type DeductionSectionKey = (typeof DEDUCTION_SECTIONS)[number];
+
+/** Every income figure the copilot may move. Mirrors INCOME_FIELDS. */
+export const INCOME_FIELD_KEYS = [
+  "basic",
+  "hra",
+  "specialAllowance",
+  "lta",
+  "otherAllowances",
+  "employerNps",
+  "professionalTax",
+  "tdsDeducted",
+  "savingsInterest",
+  "fdInterest",
+  "dividend",
+  "otherIncome",
+  "rentPaidAnnual",
+  "houseRentReceived",
+  "houseMunicipalTaxes",
+  "houseLoanInterest",
+] as const;
 
 export const MISMATCH_RESOLUTIONS = [
   "accept",
@@ -131,7 +152,7 @@ export const functionDeclarations: FunctionDeclaration[] = [
   {
     name: "add_deduction",
     description:
-      "Record a Chapter VI-A deduction amount for the taxpayer. This sets the section to the given amount (it does not add to what is already there). Statutory ceilings are applied by the app, so you may pass the full amount the user mentions.",
+      "Record a Chapter VI-A deduction amount for the taxpayer. This sets the section to the given amount (it does not add to what is already there). Statutory ceilings are applied by the app, so you may pass the full amount the user mentions. It also answers the matching deduction question, so pass amount 0 when the user says they have nothing under a section — that is how a 'no' is recorded and how the deductions step gets finished.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -222,6 +243,36 @@ export const functionDeclarations: FunctionDeclaration[] = [
     },
   },
   {
+    name: "import_form16",
+    description:
+      "Pull the taxpayer's Form 16 into the return: gross salary, every allowance, the employer's NPS contribution, professional tax and the tax already deducted. This is the first thing to do on an empty return — nothing else can be computed until income exists. Safe to call when unsure: if it is already imported you are told so and nothing changes.",
+    parameters: { type: "OBJECT", properties: {} },
+  },
+  {
+    name: "set_income",
+    description:
+      "Change one income figure in the return. Use this when the user corrects something ('my basic is actually 9.5 lakh', 'I paid 30,000 a month in rent'). It sets the field to the amount given; it does not add to it.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        field: {
+          type: "STRING",
+          enum: [...INCOME_FIELD_KEYS],
+          description:
+            "Which figure to set. Salary heads: basic, hra, specialAllowance, lta, otherAllowances, employerNps, professionalTax, tdsDeducted. Other sources: savingsInterest, fdInterest, dividend, otherIncome. Rent you pay: rentPaidAnnual (the whole year, not per month). The let-out property: houseRentReceived, houseMunicipalTaxes, houseLoanInterest.",
+        },
+        amount: { type: "NUMBER", description: "The amount in rupees." },
+      },
+      required: ["field", "amount"],
+    },
+  },
+  {
+    name: "confirm_regime",
+    description:
+      "Lock in the regime that is already selected, without changing anything. Call this once the user has seen the comparison and is happy — it is what marks the regime decision as deliberate rather than left on the default. Use switch_regime instead if the regime itself needs to change.",
+    parameters: { type: "OBJECT", properties: {} },
+  },
+  {
     name: "prepare_submission",
     description:
       "Assemble the whole return and put the final review card on the screen for the user to read and tap. Call this when the user says something like 'just file it for me'. It does NOT file anything — it is the step before that, and it is the only way to reach submit_return.",
@@ -279,6 +330,9 @@ export const TOOL_TIERS: Record<string, 1 | 2 | 3> = {
   navigate_to: 1,
   explain_term: 1,
   check_refund_status: 1,
+  import_form16: 2,
+  set_income: 2,
+  confirm_regime: 2,
   switch_regime: 2,
   add_deduction: 2,
   resolve_mismatch: 2,

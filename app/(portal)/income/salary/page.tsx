@@ -360,7 +360,7 @@ function ImportGate({ onManual }: { onManual: () => void }) {
             readOnly
           />
           <div className="px-5 py-5">
-            <Button block size="lg" onClick={importForm16}>
+            <Button block size="lg" onClick={() => importForm16()}>
               Import this Form 16
             </Button>
             <button

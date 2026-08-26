@@ -10,6 +10,7 @@ import {
   deductionEvidence,
   form16,
   grievanceTopics,
+  grossSalaryFromForm16,
   housePropertySeed,
   notices as seededNotices,
   rentDetails,
@@ -103,6 +104,32 @@ export type CopilotMessage = {
  * How to put a Tier 2 action back. Every entry that carries one gets a visible
  * one-tap "Undo" in the timeline and in the copilot transcript.
  */
+/**
+ * Every income figure the copilot is allowed to move, under one name each.
+ * Flat on purpose: the model picks a field, not a path through three nested
+ * objects, and the store is the only thing that needs to know where it lives.
+ */
+export const INCOME_FIELDS = {
+  basic: { head: "salary", label: "basic salary" },
+  hra: { head: "salary", label: "house rent allowance" },
+  specialAllowance: { head: "salary", label: "special allowance" },
+  lta: { head: "salary", label: "leave travel allowance" },
+  otherAllowances: { head: "salary", label: "other allowances" },
+  employerNps: { head: "salary", label: "employer's NPS contribution" },
+  professionalTax: { head: "salary", label: "professional tax" },
+  tdsDeducted: { head: "salary", label: "tax deducted by the employer" },
+  savingsInterest: { head: "other", label: "savings bank interest" },
+  fdInterest: { head: "other", label: "fixed deposit interest" },
+  dividend: { head: "other", label: "dividend income" },
+  otherIncome: { head: "other", label: "other income" },
+  rentPaidAnnual: { head: "hra", label: "rent paid for the year" },
+  houseRentReceived: { head: "house", label: "rent received on the let-out property" },
+  houseMunicipalTaxes: { head: "house", label: "municipal taxes paid" },
+  houseLoanInterest: { head: "house", label: "home loan interest" },
+} as const;
+
+export type IncomeField = keyof typeof INCOME_FIELDS;
+
 export type UndoPayload =
   | { kind: "regime"; previous: Regime; previouslyExplicit: boolean }
   | { kind: "deduction"; section: keyof DeductionInput; previous: number }
@@ -112,8 +139,12 @@ export type UndoPayload =
       previous: MismatchResolution;
       previousAmount: number | null;
     }
-  | { kind: "salary"; field: keyof SalaryInput; previous: number }
-  | { kind: "other-source"; field: keyof OtherSourcesInput; previous: number };
+  | { kind: "income"; field: IncomeField; previous: number }
+  | {
+      kind: "form16";
+      previousSalary: SalaryInput;
+      previouslyImported: boolean;
+    };
 
 export type ActionLogEntry = {
   id: string;
@@ -233,8 +264,15 @@ export type AppState = {
   updateProfile: (patch: Partial<ProfileState>) => void;
   setRefundAccount: (bankId: string) => void;
 
-  importForm16: () => void;
+  importForm16: (actor?: ActionLogEntry["actor"]) => void;
+  setIncomeField: (
+    field: IncomeField,
+    value: number,
+    actor?: ActionLogEntry["actor"],
+  ) => void;
   setSalaryField: (field: keyof SalaryInput, value: number) => void;
+  /** used by undo, so reversing a change is not itself logged as a change */
+  setIncomeFieldSilently: (field: IncomeField, value: number) => void;
   setHouseProperty: (patch: Partial<AppState["houseProperty"]>) => void;
   setOtherSource: (field: keyof OtherSourcesInput, value: number) => void;
   setHra: (patch: Partial<HraInput>) => void;
@@ -504,18 +542,96 @@ export const useAppStore = create<AppState>()(
       },
 
       // ---------------- income ----------------
-      importForm16: () => {
+      importForm16: (actor = "you") => {
+        const previousSalary = get().salary;
+        const previouslyImported = get().form16Imported;
+        const before = taxNow(get());
         set({ salary: seedSalary, form16Imported: true });
+        const after = taxNow(get());
         get().logAction({
-          actor: "you",
+          actor,
           tool: "import_form16",
           summary: `Imported Form 16 from ${form16.employer.name}`,
+          delta: after - before,
+          why: `Form 16 carries a gross salary of ₹${grossSalaryFromForm16.toLocaleString("en-IN")} and ₹${form16.tdsDeducted.toLocaleString("en-IN")} of tax your employer already deducted. Both are now in the return, which is why the figures moved.`,
+          undo: { kind: "form16", previousSalary, previouslyImported },
         });
         get().pushToast({
           tone: "success",
           title: "Form 16 imported",
           body: "Salary, allowances and TDS have been filled in for you.",
         });
+      },
+
+      /**
+       * The one write path for an income figure that someone should be able to
+       * see and reverse afterwards. The screens keep using the silent setters
+       * below, because logging every keystroke would bury the timeline; a
+       * change the user did not make themselves is the one that has to be
+       * auditable.
+       */
+      setIncomeField: (field, value, actor = "copilot") => {
+        const meta = INCOME_FIELDS[field];
+        const previous = readIncomeField(get(), field);
+        const before = taxNow(get());
+
+        switch (meta.head) {
+          case "salary":
+            get().setSalaryField(field as keyof SalaryInput, value);
+            break;
+          case "other":
+            get().setOtherSource(
+              field === "otherIncome" ? "other" : (field as keyof OtherSourcesInput),
+              value,
+            );
+            break;
+          case "hra":
+            get().setHra({ rentPaidAnnual: value });
+            break;
+          case "house":
+            get().setHouseProperty(
+              field === "houseRentReceived"
+                ? { annualRentReceived: value }
+                : field === "houseMunicipalTaxes"
+                  ? { municipalTaxesPaid: value }
+                  : { homeLoanInterest: value },
+            );
+            break;
+        }
+
+        const after = taxNow(get());
+        get().logAction({
+          actor,
+          tool: "set_income",
+          summary: `Set ${meta.label} to ₹${value.toLocaleString("en-IN")}`,
+          delta: after - before,
+          why: `${meta.label.charAt(0).toUpperCase()}${meta.label.slice(1)} went from ₹${previous.toLocaleString("en-IN")} to ₹${value.toLocaleString("en-IN")}, which took the tax from ₹${before.toLocaleString("en-IN")} to ₹${after.toLocaleString("en-IN")}.`,
+          undo: { kind: "income", field, previous },
+        });
+        get().touchModule("income");
+      },
+
+      setIncomeFieldSilently: (field, value) => {
+        const meta = INCOME_FIELDS[field];
+        if (meta.head === "salary") {
+          set((s) => ({ salary: { ...s.salary, [field]: value } }));
+        } else if (meta.head === "other") {
+          const key = field === "otherIncome" ? "other" : field;
+          set((s) => ({ otherSources: { ...s.otherSources, [key]: value } }));
+        } else if (meta.head === "hra") {
+          set((s) => ({ hra: { ...s.hra, rentPaidAnnual: value } }));
+        } else {
+          set((s) => ({
+            houseProperty: {
+              ...s.houseProperty,
+              ...(field === "houseRentReceived"
+                ? { annualRentReceived: value }
+                : field === "houseMunicipalTaxes"
+                  ? { municipalTaxesPaid: value }
+                  : { homeLoanInterest: value }),
+            },
+          }));
+        }
       },
 
       setSalaryField: (field, value) =>
@@ -847,13 +963,14 @@ export const useAppStore = create<AppState>()(
               } as DeductionInput,
             }));
             break;
-          case "salary":
-            set((s) => ({ salary: { ...s.salary, [u.field]: u.previous } }));
+          case "income":
+            get().setIncomeFieldSilently(u.field, u.previous);
             break;
-          case "other-source":
-            set((s) => ({
-              otherSources: { ...s.otherSources, [u.field]: u.previous },
-            }));
+          case "form16":
+            set({
+              salary: u.previousSalary,
+              form16Imported: u.previouslyImported,
+            });
             break;
           case "mismatch": {
             const seedEntry = aisEntries.find((e) => e.id === u.itemId);
@@ -996,6 +1113,26 @@ export const useAppStore = create<AppState>()(
  * actually did to the bottom line, so the timeline can say "−₹17,040" rather
  * than just naming the action.
  */
+/** Current value of any field the copilot is allowed to move. */
+export function readIncomeField(s: AppState, field: IncomeField): number {
+  switch (INCOME_FIELDS[field].head) {
+    case "salary":
+      return s.salary[field as keyof SalaryInput];
+    case "other":
+      return s.otherSources[
+        field === "otherIncome" ? "other" : (field as keyof OtherSourcesInput)
+      ];
+    case "hra":
+      return s.hra.rentPaidAnnual;
+    default:
+      return field === "houseRentReceived"
+        ? s.houseProperty.annualRentReceived
+        : field === "houseMunicipalTaxes"
+          ? s.houseProperty.municipalTaxesPaid
+          : s.houseProperty.homeLoanInterest;
+  }
+}
+
 function taxNow(s: AppState): number {
   return computeTax(toTaxpayerInput(s)).totalTaxLiability;
 }

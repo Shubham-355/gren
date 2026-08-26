@@ -131,8 +131,8 @@ export default function HelpPage() {
               "The old-versus-new comparison, computed twice on the same inputs rather than looked up.",
               "The break-even deduction figure, solved numerically against your actual income.",
               "ITR-1 eligibility, checked against eight real disqualifying conditions.",
-              "State management. One store, shared by every screen and by the copilot, persisted to your browser.",
-              "The copilot's tool calls. When it says it switched your regime, it switched your regime — the same function the button calls.",
+              "State management. One store, shared by every screen and by Saathi, persisted to your browser.",
+              "Saathi's tool calls. When it says it switched your regime, it switched your regime — the same function the button calls.",
             ].map((item) => (
               <li key={item} className="flex gap-2.5 text-[13px] leading-relaxed">
                 <span className="mt-1 shrink-0 text-[color:var(--ok)]">✓</span>
@@ -182,7 +182,7 @@ export default function HelpPage() {
             note="Both have their own screens saying so, rather than a shallow imitation."
           />
           <Row
-            label="Copilot model"
+            label="Saathi's model"
             value="A language model with function calling"
             note="The API key is held server-side in a Next.js route handler and never reaches the browser."
           />
@@ -190,7 +190,7 @@ export default function HelpPage() {
       </Card>
 
       <Callout tone="plum" title="Still stuck?">
-        The copilot can go deeper on any of these, and it knows what is on your
+        Saathi can go deeper on any of these, and knows what is on your
         screen while it does.{" "}
         <button
           onClick={() => setCopilotOpen(true)}

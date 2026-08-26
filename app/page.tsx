@@ -35,7 +35,7 @@ const bullets = [
     copilot: false,
   },
   {
-    text: "A copilot that can change your return, not just talk about it",
+    text: "An assistant that can change your return, not just talk about it",
     copilot: true,
   },
 ];
@@ -101,7 +101,7 @@ export default function LandingPage() {
             </div>
             <p className="mt-5 text-[13px] text-ink-faint">
               No account is created. Nothing you type leaves your browser except
-              copilot messages.
+              what you say to Saathi.
             </p>
 
             <ul className="mt-8 space-y-3 lg:hidden">
@@ -157,11 +157,11 @@ export default function LandingPage() {
                 </span>
                 <div>
                   <div className="text-[15px] font-semibold text-[color:var(--petrol)]">
-                    A copilot with hands
+                    Saathi has hands
                   </div>
                   <div className="mt-1 text-[14px] leading-relaxed text-ink-soft">
-                    Ask it to switch your regime and the screen behind it
-                    changes. Filing, verifying and paying still stop for your
+                    Ask Saathi to switch your regime and the screen behind
+                    it changes. Filing, verifying and paying still stop for your
                     tap.
                   </div>
                 </div>

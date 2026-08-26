@@ -11,16 +11,17 @@ import { functionDeclarations } from "@/lib/copilot/tools";
  * model's text and any function calls for the client to apply against the
  * shared store.
  *
- * Two-phase turn:
- *   phase 1 (no functionResponses)  -> model may answer, or ask for tools
- *   phase 2 (functionResponses sent) -> model sees what the tools did and
- *                                       writes the final reply
+ * The turn is an agent loop, not a fixed pair of phases. Each round the model
+ * either asks for tools or writes its reply; the client runs any tools against
+ * real state and sends the results back, and the whole accumulated exchange is
+ * replayed. That is what lets one instruction — "just file it for me" — walk
+ * the journey instead of taking a single step and stopping.
  */
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 // Overridable so the request shaping can be exercised against a local stub
 // without burning quota.
 const API_BASE =
@@ -41,19 +42,20 @@ type RequestBody = {
   messages: ClientMessage[];
   context: unknown;
   contextSummary: string;
-  /** present on phase 2 only */
-  pendingCalls?: { name: string; args: Record<string, unknown> }[];
-  functionResponses?: FunctionResponsePayload[];
   /**
-   * The model's own turn from phase 1, verbatim. Newer models attach a
-   * thoughtSignature to each function call and reject the follow-up turn if it
-   * is missing, so the parts are replayed exactly as they came back rather
-   * than rebuilt from the call names and arguments.
+   * Every completed round of tool use so far, oldest first. Each carries the
+   * model's own turn verbatim — newer models attach a thoughtSignature to each
+   * function call and reject the follow-up if it is missing — and the results
+   * the tools produced.
    */
-  modelParts?: Record<string, unknown>[];
+  toolRounds?: {
+    modelParts?: Record<string, unknown>[];
+    pendingCalls: { name: string; args: Record<string, unknown> }[];
+    functionResponses: FunctionResponsePayload[];
+  }[];
 };
 
-const SYSTEM_PROMPT = `You are TaxSaathi, the copilot built into an income tax e-filing platform for salaried taxpayers in India. You live in a side panel that is open on top of whatever screen the user is currently looking at.
+const SYSTEM_PROMPT = `You are Saathi, the AI assistant built into TaxSaathi, an income tax e-filing platform for salaried taxpayers in India. You live in a side panel that is open on top of whatever screen the user is currently looking at. TaxSaathi is the platform; Saathi is you.
 
 WHAT YOU ARE
 - You are a feature of this platform, not a general chatbot. You can see the live state of the user's return and you can change it through tools.
@@ -69,6 +71,14 @@ HOW TO ANSWER
 USING TOOLS
 - Prefer doing the thing over describing it. If the user says "switch me to the old regime", call switch_regime — do not explain how they could do it themselves.
 - After a tool runs you will be shown what it did. Report the real outcome, including the new numbers if they changed. If a tool failed, say so plainly, say what you understood the request to be, and suggest the screen they can use instead. Never claim success you were not told about.
+
+DRIVING THE WHOLE JOURNEY
+- The screen context carries a "journey" block: the ordered steps, which are done, and which one is next. When the user says "just file it for me", "do it all", or anything of that shape, work that list from the top rather than asking them where to start.
+- The order is fixed and each step needs the one before it: import_form16 -> resolve_mismatch (once per open difference) -> add_deduction (once per unanswered question) -> switch_regime or confirm_regime -> prepare_submission -> then it is the user's tap.
+- Call several tools in one turn when the next steps are unambiguous. Settling three AIS differences is three resolve_mismatch calls, not three conversations.
+- An empty return is the usual starting point. If form16Imported is false, import_form16 comes first — nothing can be computed before it, and prepare_submission will refuse.
+- The deduction questions and the amount already on record for each are in the context. Answer them with add_deduction using the sectionArgument given there; pass 0 for the ones the taxpayer has nothing under. Do not invent amounts, and do not ask the user to repeat a figure the context already holds.
+- Say what you did in one short paragraph at the end, with the figure that changed. Do not narrate each call.
 
 THE THREE RISK TIERS — this matters more than anything else here
 - Tier 1 (navigate_to, explain_term, check_refund_status): just do it. No preamble, no permission.
@@ -91,7 +101,7 @@ WHEN YOU CANNOT HELP
 
 /**
  * A zero thinking budget makes the older Flash models markedly faster, and this
- * copilot is answering from a context that is already handed to it rather than
+ * assistant is answering from a context that is already handed to it rather than
  * reasoning its way to the numbers.
  *
  * The newer models are thinking models, though: they reject `thinkingBudget: 0`
@@ -116,20 +126,20 @@ function toGeminiContents(body: RequestBody) {
     });
   }
 
-  // Phase 2: replay the model's own turn, then the results of its tool calls.
-  if (body.pendingCalls?.length && body.functionResponses?.length) {
+  // Replay every round of tool use, in order: what the model asked for, then
+  // what actually happened when it was run.
+  for (const round of body.toolRounds ?? []) {
     contents.push({
       role: "model",
-      parts:
-        body.modelParts?.length
-          ? body.modelParts
-          : body.pendingCalls.map((c) => ({
-              functionCall: { name: c.name, args: c.args },
-            })),
+      parts: round.modelParts?.length
+        ? round.modelParts
+        : round.pendingCalls.map((c) => ({
+            functionCall: { name: c.name, args: c.args },
+          })),
     });
     contents.push({
       role: "user",
-      parts: body.functionResponses.map((r) => ({
+      parts: round.functionResponses.map((r) => ({
         functionResponse: { name: r.name, response: r.response },
       })),
     });
@@ -155,7 +165,7 @@ export async function POST(request: Request) {
   if (!apiKey) {
     return NextResponse.json(
       {
-        text: "The copilot is not switched on in this deployment — no model API key is configured. Everything else on the platform works exactly as it does with me running; see the README for the one environment variable it needs.",
+        text: "Saathi is not switched on in this deployment — no model API key is configured. Everything else on the platform works exactly as it does with me running; see the README for the one environment variable it needs.",
         toolCalls: [],
         configured: false,
       },
@@ -193,7 +203,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       {
-        error: "The copilot service could not be reached.",
+        error: "Saathi could not be reached.",
         detail: error instanceof Error ? error.message : String(error),
       },
       { status: 502 },
@@ -204,9 +214,9 @@ export async function POST(request: Request) {
     const detail = await response.text().catch(() => "");
     return NextResponse.json(
       {
-        error: `The copilot service returned ${response.status}.`,
+        error: `Saathi's service returned ${response.status}.`,
         // Surfaced in the panel so a misconfigured key is obvious rather than
-        // looking like the copilot is broken.
+        // looking like Saathi is broken.
         detail: detail.slice(0, 600),
       },
       { status: 502 },

@@ -131,7 +131,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* --------- persistent copilot entry point, every screen --------- */}
         <button
           onClick={() => setCopilotOpen(!copilotOpen)}
-          aria-label="Open the AI copilot"
+          aria-label="Open Saathi, the AI assistant"
           className={cx(
             "fixed bottom-[5.5rem] right-4 z-40 flex items-center gap-2.5 rounded-[var(--radius-pill)] bg-[color:var(--petrol)] py-3 pl-4 pr-5 text-white shadow-[0_10px_24px_-10px_rgba(15,95,114,0.7)] transition-all hover:bg-[color:var(--petrol-ink)]",
             "lg:bottom-11 lg:right-0 lg:rounded-r-none lg:rounded-l-[var(--radius-sm)] lg:shadow-[-8px_8px_24px_-12px_rgba(15,95,114,0.6)]",
@@ -144,9 +144,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         >
           <CopilotStar size={20} />
-          <span className="text-[14.5px] font-medium">
-            Ask<span className="hidden lg:inline"> TaxSaathi</span>
-          </span>
+          <span className="text-[14.5px] font-medium">Ask</span>
         </button>
 
         <CopilotPanel />

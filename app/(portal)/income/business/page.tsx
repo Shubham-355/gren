@@ -24,7 +24,7 @@ export default function BusinessIncomePage() {
         {
           label: "The glossary covers the vocabulary",
           detail:
-            "Form 10-IEA, advance tax and self-assessment tax all have plain-language entries in Help, and the copilot can pull them up for you.",
+            "Form 10-IEA, advance tax and self-assessment tax all have plain-language entries in Help, and Saathi can pull them up for you.",
         },
       ]}
     />

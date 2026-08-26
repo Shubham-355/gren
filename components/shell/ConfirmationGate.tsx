@@ -10,9 +10,9 @@ import { useAppStore } from "@/lib/store/useAppStore";
  * The Tier 3 gate (§5.2).
  *
  * Filing, e-verifying and paying are irreversible, so they leave the chat and
- * become a real card on the page, in the product's own plum — never the
- * copilot's petrol, and never a chat message with a button. The copilot can
- * assemble everything and raise this card; it cannot tap it.
+ * become a real card on the page, in the product's own plum — never Saathi's
+ * petrol, and never a chat message with a button. Saathi can assemble
+ * everything and raise this card; it cannot tap it.
  *
  * The acknowledgement is single-use. A second irreversible action raises its
  * own card and needs its own fresh tap, so the gesture stays tied to a read
@@ -109,7 +109,7 @@ export function ConfirmationGate() {
 
         {pending.requestedBy === "copilot" ? (
           <p className="mt-3 rounded-[var(--radius-sm)] border border-petrol-100 bg-petrol-50 px-3 py-2.5 text-[12.5px] leading-relaxed text-[color:var(--petrol-text)]">
-            The copilot assembled this. It cannot complete the step itself —
+            Saathi assembled this. It cannot complete the step itself —
             this one takes your tap, not a typed yes.
           </p>
         ) : null}

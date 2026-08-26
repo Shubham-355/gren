@@ -13,6 +13,15 @@ import { applyTool } from "./applyTool";
 const rid = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
+/**
+ * How many rounds of tool use one instruction may take before we stop and hand
+ * back whatever has been done. "Just file it for me" on an empty return is
+ * import, three mismatches, eight deduction answers, a regime and a
+ * prepare_submission — comfortably inside this, while still bounding what a
+ * confused model can spend.
+ */
+const MAX_TOOL_ROUNDS = 8;
+
 /** Screen-aware openers, so the panel is never a blank box. */
 function suggestionsFor(module: string, pendingCount: number): string[] {
   const base: Record<string, string[]> = {
@@ -126,72 +135,69 @@ export function CopilotPanel() {
     const navigate = (href: string) => router.push(href);
 
     try {
-      const context = buildScreenContext(useAppStore.getState(), pathname);
-      const first = await postChat({
-        messages: history,
-        context,
-        contextSummary: summariseContext(context),
-      });
+      const rounds: ToolRound[] = [];
+      const actions: NonNullable<CopilotMessage["actions"]> = [];
+      let reply: ChatResponse | null = null;
 
-      if (first.error) {
-        push({
-          id: rid(),
-          role: "assistant",
-          text: first.error,
-          at: new Date().toISOString(),
-          error: true,
+      // The agent loop. Each pass the model either asks for tools or answers;
+      // tools are run against the real store and the results fed back, so a
+      // single instruction can walk several steps of the journey.
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const context = buildScreenContext(useAppStore.getState(), pathname);
+        const response = await postChat({
+          messages: history,
+          context,
+          contextSummary: summariseContext(context),
+          toolRounds: rounds,
         });
-        return;
-      }
 
-      const calls: ToolCall[] = first.toolCalls ?? [];
+        if (response.error) {
+          push({
+            id: rid(),
+            role: "assistant",
+            text: response.error,
+            at: new Date().toISOString(),
+            actions: actions.length ? actions : undefined,
+            error: true,
+          });
+          return;
+        }
 
-      if (calls.length === 0) {
-        push({
-          id: rid(),
-          role: "assistant",
-          text: first.text || "I did not have anything useful to add there.",
-          at: new Date().toISOString(),
+        reply = response;
+        const calls: ToolCall[] = response.toolCalls ?? [];
+        if (calls.length === 0) break;
+
+        const outcomes: ToolOutcome[] = calls.map((call) =>
+          applyTool(call, navigate),
+        );
+        actions.push(
+          ...outcomes.map((o) => ({
+            tool: o.name,
+            summary: o.summary,
+            ok: o.ok,
+            logId: o.logId,
+          })),
+        );
+        rounds.push({
+          modelParts: response.modelParts,
+          pendingCalls: calls,
+          functionResponses: outcomes.map((o) => ({
+            name: o.name,
+            response: o.result,
+          })),
         });
-        return;
       }
-
-      // The model asked for tools. Run them against the real store, then hand
-      // the results back so it can describe what actually happened.
-      const outcomes: ToolOutcome[] = calls.map((call) =>
-        applyTool(call, navigate),
-      );
-
-      const afterContext = buildScreenContext(useAppStore.getState(), pathname);
-      const second = await postChat({
-        messages: history,
-        context: afterContext,
-        contextSummary: summariseContext(afterContext),
-        pendingCalls: calls,
-        // Replayed verbatim so newer models get their thought signatures back.
-        modelParts: first.modelParts,
-        functionResponses: outcomes.map((o) => ({
-          name: o.name,
-          response: o.result,
-        })),
-      });
 
       push({
         id: rid(),
         role: "assistant",
         text:
-          second.text ||
-          first.text ||
-          outcomes.map((o) => o.summary).join(". ") ||
-          "Done.",
+          reply?.text ||
+          (actions.length
+            ? actions.map((a) => a.summary).join(". ")
+            : "I did not have anything useful to add there."),
         at: new Date().toISOString(),
-        actions: outcomes.map((o) => ({
-          tool: o.name,
-          summary: o.summary,
-          ok: o.ok,
-          logId: o.logId,
-        })),
-        error: Boolean(second.error),
+        actions: actions.length ? actions : undefined,
       });
     } catch (error) {
       push({
@@ -199,8 +205,8 @@ export function CopilotPanel() {
         role: "assistant",
         text:
           error instanceof Error
-            ? `I could not reach the copilot service: ${error.message}. Nothing in your return was changed — the screens still work on their own.`
-            : "I could not reach the copilot service. Nothing in your return was changed.",
+            ? `I could not reach my service: ${error.message}. Nothing in your return was changed — the screens still work on their own.`
+            : "I could not reach my service. Nothing in your return was changed.",
         at: new Date().toISOString(),
         error: true,
       });
@@ -222,7 +228,7 @@ export function CopilotPanel() {
       ) : null}
 
       <aside
-        aria-label="AI copilot"
+        aria-label="Saathi, the AI assistant"
         aria-hidden={!open}
         className={cx(
           "fixed bottom-0 right-0 z-50 flex w-full flex-col bg-surface transition-transform duration-200 ease-out",
@@ -240,7 +246,7 @@ export function CopilotPanel() {
           </span>
           <div className="min-w-0 flex-1">
             <div className="text-[15px] font-semibold text-[color:var(--petrol)]">
-              Copilot
+              Saathi
             </div>
             <p className="truncate text-[12px] text-ink-soft">
               Reading your live return · {moduleKey}
@@ -277,7 +283,7 @@ export function CopilotPanel() {
 
         {/* the persistent "this is an AI" label required by §5.4 */}
         <p className="border-b border-petrol-edge bg-petrol-soft px-5 py-2.5 text-[12px] text-[color:var(--petrol-400)]">
-          AI copilot — review anything it changes before you confirm.
+          Saathi is an AI — review anything it changes before you confirm.
         </p>
 
         <div
@@ -406,7 +412,7 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
         {message.text.split("\n").map((line, i) =>
           line.trim() ? (
             <p key={i} className={i > 0 ? "mt-2" : undefined}>
-              {line}
+              {renderEmphasis(line)}
             </p>
           ) : null,
         )}
@@ -430,6 +436,26 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
       ) : null}
     </div>
   );
+}
+
+/**
+ * Models reach for **bold** even when asked not to, and a stray pair of
+ * asterisks around a rupee figure reads as a bug. Render the emphasis rather
+ * than printing the markup — and nothing else, because nothing else belongs in
+ * a chat bubble this size.
+ */
+function renderEmphasis(line: string) {
+  return line
+    .split(/(\*\*[^*]+\*\*)/g)
+    .map((part, i) =>
+      part.startsWith("**") && part.endsWith("**") && part.length > 4 ? (
+        <strong key={i} className="font-semibold">
+          {part.slice(2, -2)}
+        </strong>
+      ) : (
+        part
+      ),
+    );
 }
 
 function ActionRow({
@@ -483,6 +509,12 @@ function ActionRow({
 
 /* ---------------------------------------------------------------- */
 
+type ToolRound = {
+  modelParts?: Record<string, unknown>[];
+  pendingCalls: ToolCall[];
+  functionResponses: { name: string; response: Record<string, unknown> }[];
+};
+
 type ChatResponse = {
   text?: string;
   toolCalls?: ToolCall[];
@@ -504,7 +536,7 @@ async function postChat(body: unknown): Promise<ChatResponse> {
     return {
       error:
         [data.error, data.detail].filter(Boolean).join(" ") ||
-        `The copilot service returned ${res.status}.`,
+        `Saathi's service returned ${res.status}.`,
     };
   }
   return data;

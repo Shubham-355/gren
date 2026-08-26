@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     template: "%s · TaxSaathi",
   },
   description:
-    "An independent hackathon prototype reimagining income tax e-filing for salaried taxpayers in India, with an AI copilot that can read and change your return. Not affiliated with the Income Tax Department.",
+    "An independent hackathon prototype reimagining income tax e-filing for salaried taxpayers in India, with an AI assistant that can read and change your return. Not affiliated with the Income Tax Department.",
   robots: { index: false, follow: false },
 };
 

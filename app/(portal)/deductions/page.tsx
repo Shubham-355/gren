@@ -169,7 +169,7 @@ function GuidedDiscovery({ onBrowse }: { onBrowse: () => void }) {
             onClick={() => setCopilotOpen(true)}
             className="border-b border-[color:var(--petrol)] text-[13.5px] font-medium text-[color:var(--petrol)]"
           >
-            Tell the copilot in a sentence
+            Tell Saathi in a sentence
           </button>
         </div>
       </div>

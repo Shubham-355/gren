@@ -277,7 +277,7 @@ export default function ProfilePage() {
       <Card tone="sunk">
         <CardHeader
           title="Recent activity"
-          eyebrow="Everything you and the copilot have done"
+          eyebrow="Everything you and Saathi have done"
           description="Every state change on this platform is logged here, whoever made it."
         />
         {state.actionLog.length === 0 ? (
