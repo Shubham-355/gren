@@ -2,12 +2,21 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { CopilotStar } from "@/components/shell/AppShell";
 import { cx } from "@/components/ui";
 import { buildScreenContext, summariseContext } from "@/lib/copilot/context";
 import type { ToolCall, ToolOutcome } from "@/lib/copilot/tools";
-import { useAppStore, type CopilotMessage } from "@/lib/store/useAppStore";
+import { discoveryQuestions } from "@/lib/data/discovery";
+import {
+  pendingMismatches,
+  toTaxpayerInput,
+  useAppStore,
+  type AppState,
+  type CopilotMessage,
+} from "@/lib/store/useAppStore";
+import { compareRegimes } from "@/lib/tax/compute";
 import { applyTool } from "./applyTool";
 
 const rid = () =>
@@ -22,46 +31,80 @@ const rid = () =>
  */
 const MAX_TOOL_ROUNDS = 8;
 
-/** Screen-aware openers, so the panel is never a blank box. */
-function suggestionsFor(module: string, pendingCount: number): string[] {
-  const base: Record<string, string[]> = {
-    dashboard: [
-      "What still needs doing before I can file?",
-      "Just file it for me",
-    ],
-    reconciliation: [
-      "What is the fixed deposit difference and should I accept it?",
-      "Settle all three for me",
-    ],
-    deductions: [
-      "What else could I still claim?",
-      "Add ₹50,000 under 80CCD(1B)",
-    ],
-    regime: [
-      "Show me the slab-by-slab working",
-      "Which regime is cheaper? Just put me on it",
-    ],
-    salary: ["Explain what the standard deduction does here"],
-    "other-sources": ["Is my savings interest taxable if no tax was cut?"],
-    filing: ["Walk me through what I am about to submit"],
-    refund: ["Where is my refund?"],
-    notices: ["What does this notice actually want from me?"],
-    grievance: ["My refund is late — raise a grievance about it"],
-    help: ["What is the difference between AIS and 26AS?"],
-    history: ["How did last year compare with this year?"],
-    profile: ["Is my profile ready for filing?"],
-  };
-  const list = base[module] ?? [
-    "What should I do on this screen?",
-    "Explain this page in plain language",
-  ];
-  if (pendingCount > 0 && module !== "reconciliation") {
-    return [
-      `I have ${pendingCount} unresolved differences — help`,
-      ...list,
-    ].slice(0, 3);
+function moduleKeyOf(pathname: string): string {
+  if (pathname === "/") return "landing";
+  const segment = pathname.split("/").filter(Boolean);
+  return segment[segment.length - 1] || "dashboard";
+}
+
+/**
+ * What to offer, and when to offer nothing.
+ *
+ * These used to be a fixed list per screen, which meant they went stale the
+ * moment anything was done — offering to settle three differences that were
+ * already settled, or to file a return that was already filed. They are now
+ * derived from where the return actually is, so a chip is never a dead end.
+ */
+function buildSuggestions(state: AppState, module: string): string[] {
+  // While an irreversible step is waiting on a tap, the answer is on the card,
+  // not in the chat. Offering conversation here would pull attention off it.
+  if (state.pendingConfirmation) return [];
+
+  const pending = pendingMismatches(state).length;
+  const unanswered = discoveryQuestions.filter(
+    (q) => !state.discoveryAnswered.includes(q.id),
+  ).length;
+  const comparison = compareRegimes(toTaxpayerInput(state));
+
+  const out: string[] = [];
+
+  // The next real move, phrased as the user would say it.
+  if (!state.form16Imported) {
+    out.push("Bring in my Form 16");
+  } else if (pending > 0) {
+    out.push(
+      pending === 1
+        ? "Settle the last AIS difference for me"
+        : `Settle all ${pending} AIS differences for me`,
+    );
+  } else if (unanswered > 0) {
+    out.push("Answer my deduction questions");
+  } else if (
+    comparison.recommended !== state.regime &&
+    comparison.saving > 0
+  ) {
+    out.push(`Put me on the ${comparison.recommended} regime`);
+  } else if (!state.filing.submitted) {
+    out.push("Get my return ready to file");
+  } else if (!state.filing.everified) {
+    out.push("What happens if I do not verify?");
+  } else {
+    out.push("Where is my refund?");
   }
-  return list.slice(0, 3);
+
+  // One question about this screen, when there is a good one.
+  const perScreen: Record<string, string> = {
+    dashboard: "What still needs doing before I can file?",
+    reconciliation: "Why does the department care about these differences?",
+    deductions: "What else could I still claim?",
+    regime: "Show me the slab-by-slab working",
+    salary: "Explain what the standard deduction does here",
+    "other-sources": "Is my savings interest taxable if no tax was cut?",
+    filing: "Walk me through what I am about to submit",
+    refund: "How long should the refund take?",
+    notices: "What does this notice actually want from me?",
+    grievance: "My refund is late — raise a grievance about it",
+    help: "What is the difference between AIS and 26AS?",
+    history: "How did last year compare with this year?",
+    profile: "Is my profile ready for filing?",
+  };
+  if (perScreen[module]) out.push(perScreen[module]);
+
+  if (!state.filing.submitted && state.form16Imported) {
+    out.push("Just file it for me");
+  }
+
+  return out;
 }
 
 export function CopilotPanel() {
@@ -77,10 +120,8 @@ export function CopilotPanel() {
   const actionCount = useAppStore(
     (s) => s.actionLog.filter((a) => a.actor === "copilot" && !a.undone).length,
   );
-  const pendingCount = useAppStore(
-    (s) =>
-      Object.values(s.reconciliation).filter((r) => r.resolution === "pending")
-        .length,
+  const suggestionSource = useAppStore(
+    useShallow((s) => buildSuggestions(s, moduleKeyOf(pathname))),
   );
 
   const [input, setInput] = useState("");
@@ -88,11 +129,7 @@ export function CopilotPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const moduleKey = useMemo(() => {
-    if (pathname === "/") return "landing";
-    const segment = pathname.split("/").filter(Boolean);
-    return segment[segment.length - 1] || "dashboard";
-  }, [pathname]);
+  const moduleKey = useMemo(() => moduleKeyOf(pathname), [pathname]);
 
   // Actions land on the last message rather than creating new ones, so the
   // message count alone is not enough to keep the view pinned to the bottom.
@@ -234,7 +271,13 @@ export function CopilotPanel() {
     }
   }
 
-  const suggestions = suggestionsFor(moduleKey, pendingCount);
+  // Never offer something the user has already said in this conversation.
+  const alreadyAsked = new Set(
+    messages.filter((m) => m.role === "user").map((m) => m.text.toLowerCase()),
+  );
+  const suggestions = suggestionSource.filter(
+    (text) => !alreadyAsked.has(text.toLowerCase()),
+  );
 
   return (
     <>
@@ -318,7 +361,7 @@ export function CopilotPanel() {
                 stay with you.
               </p>
               <div className="mt-4 space-y-2">
-                {suggestions.map((s) => (
+                {suggestions.slice(0, 3).map((s) => (
                   <button
                     key={s}
                     onClick={() => void send(s)}
@@ -338,7 +381,7 @@ export function CopilotPanel() {
 
         </div>
 
-        {messages.length > 0 && !busy ? (
+        {messages.length > 0 && !busy && suggestions.length > 0 ? (
           <div className="space-y-2 border-t border-line px-5 pt-3">
             {suggestions.slice(0, 2).map((s) => (
               <button
@@ -457,11 +500,20 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
 }
 
 function ActionList({ message }: { message: CopilotMessage }) {
-  const undoAllBy = useAppStore((s) => s.undoAllBy);
+  const undoMany = useAppStore((s) => s.undoMany);
+
+  // Only this reply's own actions. Counting every reversible thing in the
+  // session put "Undo all 11" under a list of two, and tapping it really did
+  // reverse the other nine.
+  const ids = (message.actions ?? [])
+    .map((a) => a.logId)
+    .filter((id): id is string => Boolean(id));
   const reversible = useAppStore(
-    (s) =>
-      s.actionLog.filter((a) => a.actor === "copilot" && a.undo && !a.undone)
-        .length,
+    useShallow((s) =>
+      s.actionLog
+        .filter((a) => ids.includes(a.id) && a.undo && !a.undone)
+        .map((a) => a.id),
+    ),
   );
 
   return (
@@ -470,12 +522,12 @@ function ActionList({ message }: { message: CopilotMessage }) {
         <span className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[color:var(--petrol-400)]">
           Actions taken
         </span>
-        {reversible > 1 && !message.pending ? (
+        {reversible.length > 1 && !message.pending ? (
           <button
-            onClick={() => undoAllBy("copilot")}
+            onClick={() => undoMany(reversible)}
             className="text-[12px] font-semibold text-[color:var(--petrol)] underline underline-offset-2"
           >
-            Undo all {reversible}
+            Undo these {reversible.length}
           </button>
         ) : null}
       </div>

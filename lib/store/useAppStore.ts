@@ -319,6 +319,8 @@ export type AppState = {
   logAction: (entry: Omit<ActionLogEntry, "id" | "at">) => void;
   undoAction: (id: string, options?: { quiet?: boolean }) => ToolResult;
   undoAllBy: (actor: ActionLogEntry["actor"]) => ToolResult;
+  /** reverse a specific set of entries — used to undo one reply's worth */
+  undoMany: (ids: string[]) => ToolResult;
 
   requestConfirmation: (
     confirmation: Omit<PendingConfirmation, "createdAt" | "acknowledged">,
@@ -1035,6 +1037,25 @@ export const useAppStore = create<AppState>()(
           title: summary,
           body: "Your return is back where it was.",
         });
+        return { ok: true, summary };
+      },
+
+      /**
+       * Undo exactly the entries named, newest first. This is what sits under a
+       * single reply in the transcript: undoing "these two" must mean those
+       * two, not everything the assistant has ever done in the session.
+       */
+      undoMany: (ids) => {
+        const log = get().actionLog;
+        const targets = log.filter(
+          (a) => ids.includes(a.id) && a.undo && !a.undone,
+        );
+        if (targets.length === 0) {
+          return { ok: false, summary: "There is nothing left to undo there." };
+        }
+        for (const entry of targets) get().undoAction(entry.id, { quiet: true });
+        const summary = `Undid ${targets.length} ${targets.length === 1 ? "change" : "changes"}`;
+        get().pushToast({ tone: "info", title: summary });
         return { ok: true, summary };
       },
 

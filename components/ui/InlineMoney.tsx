@@ -30,7 +30,13 @@ export function InlineMoneyRow({
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState("");
 
-  const display = focused ? draft : value ? value.toLocaleString("en-IN") : "0";
+  // Grouped even while being edited. Dropping to raw digits on focus made the
+  // field being edited look different from every other row on the card.
+  const display = focused
+    ? draft
+    : value
+      ? value.toLocaleString("en-IN")
+      : "0";
   const editable = !readOnly && Boolean(onValueChange);
 
   return (
@@ -57,25 +63,30 @@ export function InlineMoneyRow({
       </div>
 
       {editable ? (
-        <span className="flex shrink-0 items-center">
+        <span className="flex shrink-0 items-center gap-0.5">
           <span className="text-[15px] text-ink-faint">₹</span>
           <input
             inputMode="numeric"
             aria-label={typeof label === "string" ? label : undefined}
             value={display}
-            onFocus={() => {
-              setDraft(value ? String(value) : "");
+            onFocus={(e) => {
+              setDraft(value ? value.toLocaleString("en-IN") : "");
               setFocused(true);
+              e.currentTarget.select();
             }}
             onBlur={() => setFocused(false)}
             onChange={(e) => {
-              setDraft(e.target.value);
               const n = parseAmount(e.target.value);
-              onValueChange?.(max !== undefined ? Math.min(n, max) : n);
+              const next = max !== undefined ? Math.min(n, max) : n;
+              setDraft(e.target.value.trim() === "" ? "" : next.toLocaleString("en-IN"));
+              onValueChange?.(next);
             }}
-            size={Math.max(display.length, 4)}
             className={cx(
-              "tnum rounded-[8px] border border-transparent bg-transparent px-1.5 py-1 text-right text-[15px] font-medium text-ink",
+              // A fixed width, not one derived from the value. Sizing each box
+              // to its own digits left the column ragged — a wide box beside
+              // ₹4,60,000 and a tiny one beside ₹0 — and made every box jump as
+              // you typed.
+              "tnum w-[7.5rem] rounded-[8px] border border-transparent bg-transparent px-2 py-1 text-right text-[15px] font-medium text-ink",
               "hover:border-line-strong focus:border-[color:var(--plum)] focus:bg-surface focus:outline-none",
               emphasis && "text-[17px] font-semibold",
             )}

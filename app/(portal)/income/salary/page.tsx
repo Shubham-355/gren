@@ -79,14 +79,16 @@ export default function SalaryPage() {
             with it.
           </p>
 
-          <div className="mt-7 grid gap-5 xl:grid-cols-2">
+          <div className="mt-7 grid items-start gap-5 xl:grid-cols-2">
             {/* ------------------------- salary ------------------------- */}
             <Card className="overflow-hidden">
               <div className="flex items-center justify-between gap-3 border-b border-line bg-sunk px-4 py-3.5 sm:px-5">
                 <div className="min-w-0">
                   <div className="text-[15px] font-semibold">Salary</div>
-                  <div className="mono truncate text-[11.5px] text-ink-faint">
-                    {form16.employer.name} · TAN {form16.employer.tan}
+                  <div className="mono text-[11.5px] leading-snug text-ink-faint">
+                    {form16.employer.name}
+                    <br />
+                    TAN {form16.employer.tan}
                   </div>
                 </div>
                 <Badge tone={state.form16Imported ? "ok" : "warn"}>
@@ -158,9 +160,16 @@ export default function SalaryPage() {
                       ))}
                       <div className="mt-1.5 flex items-baseline justify-between gap-3 border-t border-line pt-2 text-[14px] font-semibold">
                         <span>
-                          {state.regime === "old"
-                            ? "Exempt — the smallest of the three"
-                            : "Exempt under the new regime"}
+                          {state.regime === "old" ? (
+                            "Exempt — the smallest of the three"
+                          ) : (
+                            <>
+                              Exempt right now
+                              <span className="ml-1.5 font-normal text-ink-faint">
+                                the new regime allows no HRA
+                              </span>
+                            </>
+                          )}
                         </span>
                         <span className="tnum">
                           {inr(state.regime === "old" ? hra.exemption : 0)}
@@ -171,18 +180,22 @@ export default function SalaryPage() {
                     <div className="mt-3.5 flex flex-wrap items-center gap-4">
                       <label className="flex items-center gap-2 text-[13.5px] text-ink-soft">
                         <span>Rent for the year</span>
-                        <input
-                          inputMode="numeric"
-                          value={state.hra.rentPaidAnnual.toLocaleString("en-IN")}
-                          onChange={(e) =>
-                            state.setHra({
-                              rentPaidAnnual: Number(
-                                e.target.value.replace(/[^0-9]/g, "") || 0,
-                              ),
-                            })
-                          }
-                          className="tnum w-28 rounded-[8px] border border-line-strong bg-surface px-2 py-1 text-right text-[14px] focus:border-[color:var(--plum)] focus:outline-none"
-                        />
+                        <span className="flex items-center gap-0.5">
+                          <span className="text-[14px] text-ink-faint">₹</span>
+                          <input
+                            inputMode="numeric"
+                            aria-label="Rent paid for the year"
+                            value={state.hra.rentPaidAnnual.toLocaleString("en-IN")}
+                            onChange={(e) =>
+                              state.setHra({
+                                rentPaidAnnual: Number(
+                                  e.target.value.replace(/[^0-9]/g, "") || 0,
+                                ),
+                              })
+                            }
+                            className="tnum w-[7rem] rounded-[8px] border border-line-strong bg-surface px-2 py-1 text-right text-[14px] focus:border-[color:var(--plum)] focus:outline-none"
+                          />
+                        </span>
                       </label>
                       <button
                         onClick={() => state.setHra({ metroCity: !state.hra.metroCity })}
@@ -264,7 +277,14 @@ export default function SalaryPage() {
                 muted={current.hraExemption === 0}
               />
               <SummaryRow
-                label="Professional tax"
+                label={
+                  <>
+                    Professional tax
+                    {current.professionalTax === 0 && state.salary.professionalTax > 0 ? (
+                      <span className="text-[12px] text-ink-faint"> (new regime)</span>
+                    ) : null}
+                  </>
+                }
                 value={
                   current.professionalTax > 0
                     ? `− ${inr(current.professionalTax)}`
