@@ -126,7 +126,7 @@ export default function OtherSourcesPage() {
               action={
                 <Link
                   href="/reconciliation"
-                  className="text-[13px] font-medium text-[color:var(--pine)]"
+                  className="text-[13px] font-medium text-[color:var(--plum)]"
                 >
                   Reconcile
                 </Link>

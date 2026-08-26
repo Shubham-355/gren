@@ -1,330 +1,480 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { FlowActionBar, PhoneStepHeader } from "@/components/shell/StepRail";
 import {
-  Badge,
   Button,
-  Callout,
   Card,
-  CardHeader,
-  ComputedTag,
-  PageHeader,
+  LinkButton,
   Row,
-  Stat,
   Term,
   cx,
 } from "@/components/ui";
-import { daysUntil, inr, pct, shortDate } from "@/lib/format";
+import { daysUntil, inr, shortDate } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
 import { useAppStore } from "@/lib/store/useAppStore";
 import type { Regime, TaxComputation } from "@/lib/tax/compute";
-import {
-  BELATED_DEADLINE,
-  FILING_DEADLINE,
-  STANDARD_DEDUCTION,
-} from "@/lib/tax/constants";
+import { BELATED_DEADLINE, FILING_DEADLINE } from "@/lib/tax/constants";
 
+/**
+ * Step 6 — Regime comparison.
+ *
+ * Two columns, aligned rows, one visually winning column. Not two cards the
+ * user has to mentally diff, and not a recommendation without its arithmetic.
+ */
 export default function RegimePage() {
+  const router = useRouter();
   const state = useAppStore();
   const { comparison, current, breakEven } = useTax();
-  const [showWorking, setShowWorking] = useState(false);
+  const [showWorking, setShowWorking] = useState<Regime | null>(null);
 
   const recommended = comparison.recommended;
   const onRecommended = state.regime === recommended;
+  const other: Regime = state.regime === "old" ? "new" : "old";
   const daysLeft = daysUntil(FILING_DEADLINE);
 
-  const claimedOldRegimeShelter =
+  // Keeping a regime is a real decision, so it is recorded as one — even
+  // though nothing about the numbers changes.
+  function keepCurrent() {
+    state.confirmRegime();
+    router.push("/filing");
+  }
+
+  const shelter =
     comparison.old.exemptAllowances +
     comparison.old.chapterVIA +
     comparison.old.professionalTax;
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        eyebrow="Step 3 of preparing your return"
-        title="Old regime or new"
-        intro="Both are computed on the numbers you have actually entered — not on an average, not on an assumption. Change anything anywhere on the platform and these two figures move."
-        aside={<Badge tone="pine">{state.regime} selected</Badge>}
-      />
+    <div>
+      <PhoneStepHeader back={{ href: "/deductions" }} />
 
-      {/* ---------------- the recommendation ---------------- */}
-      <Card tone={onRecommended ? "ok" : "accent"}>
-        <div className="px-4 py-4">
-          <div className="eyebrow">The recommendation</div>
-          <h2 className="mt-1 font-display text-[22px] leading-snug sm:text-[26px]">
-            {onRecommended ? (
-              <>
-                Stay on the {recommended} regime — it saves you{" "}
-                <span className="text-[color:var(--ok)]">
-                  {inr(comparison.saving)}
-                </span>
-                .
-              </>
-            ) : (
-              <>
-                Switch to the {recommended} regime and pay{" "}
-                <span className="text-[color:var(--pine)]">
-                  {inr(comparison.saving)}
-                </span>{" "}
-                less.
-              </>
-            )}
-          </h2>
-          <p className="mt-2 max-w-prose text-[13.5px] leading-relaxed text-ink-soft">
-            {explainRecommendation(
-              recommended,
-              claimedOldRegimeShelter,
-              breakEven,
-              comparison.saving,
-            )}
-          </p>
+      <h1 className="max-w-[26rem] font-display text-[32px] leading-[1.08] tracking-[-0.01em] sm:text-[44px] sm:leading-[1.05]">
+        {comparison.saving === 0
+          ? "Both regimes cost you the same"
+          : `The ${recommended} regime costs you ${inr(comparison.saving)} less`}
+      </h1>
+      <p className="mt-3 max-w-[32rem] text-[15px] leading-relaxed text-ink-soft [text-wrap:pretty] sm:text-[15.5px]">
+        {explainRecommendation(recommended, shelter, breakEven, comparison.saving)}{" "}
+        Both columns are computed on the same return.
+      </p>
 
-          {!onRecommended ? (
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button onClick={() => state.setRegime(recommended)}>
-                Switch to the {recommended} regime
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => state.setRegime(state.regime)}
-              >
-                Keep the {state.regime} regime
-              </Button>
-            </div>
+      {/* --------------------------- the comparison --------------------------- */}
+      <Card className="scroll-x mt-6 overflow-hidden">
+        <div className="grid min-w-[34rem] grid-cols-[1.5fr_1fr_1fr]">
+          <HeadCell />
+          <HeadCell
+            title="New regime"
+            sub="Wider slabs, ₹75,000 standard deduction"
+            winner={recommended === "new"}
+            chosen={state.regime === "new"}
+          />
+          <HeadCell
+            title="Old regime"
+            sub="Narrower slabs, the full deduction menu"
+            winner={recommended === "old"}
+            chosen={state.regime === "old"}
+          />
+
+          <CompareRow
+            label="Gross salary"
+            newValue={inr(comparison.new.grossSalary)}
+            oldValue={inr(comparison.old.grossSalary)}
+            winner={recommended}
+          />
+          <CompareRow
+            label="HRA exemption"
+            newValue={
+              comparison.new.hraExemption > 0
+                ? `− ${inr(comparison.new.hraExemption)}`
+                : "not allowed"
+            }
+            oldValue={
+              comparison.old.hraExemption > 0
+                ? `− ${inr(comparison.old.hraExemption)}`
+                : "nothing claimed"
+            }
+            winner={recommended}
+            mutedNew={comparison.new.hraExemption === 0}
+          />
+          <CompareRow
+            label="Standard deduction"
+            newValue={`− ${inr(comparison.new.standardDeduction)}`}
+            oldValue={`− ${inr(comparison.old.standardDeduction)}`}
+            winner={recommended}
+          />
+          {state.houseProperty.enabled ? (
+            <CompareRow
+              label="House property"
+              sub="let-out flat, loan interest"
+              newValue={
+                comparison.new.incomeFromHouseProperty === 0 &&
+                comparison.old.incomeFromHouseProperty < 0
+                  ? "loss disallowed"
+                  : inr(comparison.new.incomeFromHouseProperty)
+              }
+              oldValue={
+                comparison.old.incomeFromHouseProperty < 0
+                  ? `− ${inr(-comparison.old.incomeFromHouseProperty)}`
+                  : inr(comparison.old.incomeFromHouseProperty)
+              }
+              winner={recommended}
+              mutedNew={
+                comparison.new.incomeFromHouseProperty === 0 &&
+                comparison.old.incomeFromHouseProperty < 0
+              }
+            />
           ) : null}
+          <CompareRow
+            label="Interest and dividend"
+            newValue={inr(comparison.new.incomeFromOtherSources)}
+            oldValue={inr(comparison.old.incomeFromOtherSources)}
+            winner={recommended}
+          />
+          <CompareRow
+            label="Deductions claimed"
+            sub="Chapter VI-A"
+            newValue={`− ${inr(comparison.new.chapterVIA)}`}
+            oldValue={`− ${inr(comparison.old.chapterVIA)}`}
+            winner={recommended}
+          />
+
+          <CompareRow
+            label="Taxable income"
+            newValue={inr(comparison.new.totalIncome)}
+            oldValue={inr(comparison.old.totalIncome)}
+            winner={recommended}
+            strong
+          />
+
+          <CompareRow
+            label="Tax on the slabs"
+            newValue={inr(Math.round(comparison.new.taxAfterRebate))}
+            oldValue={inr(Math.round(comparison.old.taxAfterRebate))}
+            winner={recommended}
+          />
+          {comparison.new.surcharge > 0 || comparison.old.surcharge > 0 ? (
+            <CompareRow
+              label="Surcharge"
+              newValue={inr(Math.round(comparison.new.surcharge))}
+              oldValue={inr(Math.round(comparison.old.surcharge))}
+              winner={recommended}
+            />
+          ) : null}
+          <CompareRow
+            label="Health and education cess, 4%"
+            newValue={inr(Math.round(comparison.new.cess))}
+            oldValue={inr(Math.round(comparison.old.cess))}
+            winner={recommended}
+          />
+
+          <TotalRow
+            newValue={comparison.new.totalTaxLiability}
+            oldValue={comparison.old.totalTaxLiability}
+            winner={recommended}
+          />
+
+          <CompareRow
+            label={`${comparison.new.refundDue > 0 || comparison.old.refundDue > 0 ? "Refund" : "Balance payable"} after the ${inr(current.tdsCredit)} already paid`}
+            newValue={inr(
+              comparison.new.refundDue > 0
+                ? comparison.new.refundDue
+                : comparison.new.taxPayable,
+            )}
+            oldValue={inr(
+              comparison.old.refundDue > 0
+                ? comparison.old.refundDue
+                : comparison.old.taxPayable,
+            )}
+            winner={recommended}
+            last
+            emphasiseWinner
+          />
         </div>
       </Card>
 
-      {/* ---------------- side by side ---------------- */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <RegimeCard
-          regime="new"
-          computation={comparison.new}
-          selected={state.regime === "new"}
-          recommended={recommended === "new"}
-          onSelect={() => state.setRegime("new")}
-        />
-        <RegimeCard
-          regime="old"
-          computation={comparison.old}
-          selected={state.regime === "old"}
-          recommended={recommended === "old"}
-          onSelect={() => state.setRegime("old")}
-        />
+      {/* --------------------------- the decision --------------------------- */}
+      <div className="mt-5 hidden flex-wrap items-center gap-4 lg:flex">
+        {onRecommended ? (
+          <Button size="lg" onClick={keepCurrent}>
+            Keep the {state.regime} regime and continue
+          </Button>
+        ) : (
+          <Button size="lg" onClick={() => state.setRegime(recommended)}>
+            Switch to the {recommended} regime
+          </Button>
+        )}
+        <span className="text-[14px] text-ink-soft">
+          or{" "}
+          {onRecommended ? (
+            <button
+              onClick={() => state.setRegime(other)}
+              className="border-b border-[color:var(--plum)] text-[color:var(--plum)]"
+            >
+              use the {other} regime instead
+            </button>
+          ) : (
+            <button
+              onClick={keepCurrent}
+              className="border-b border-[color:var(--plum)] text-[color:var(--plum)]"
+            >
+              stay on the {state.regime} regime and pay the extra{" "}
+              {inr(comparison.saving)}
+            </button>
+          )}
+        </span>
       </div>
 
-      {/* ---------------- deadline consequence ---------------- */}
-      <Callout
-        tone={daysLeft <= 30 ? "alert" : "warn"}
-        title="The regime choice has a deadline attached to it"
-      >
-        You can pick either regime freely — but only while you are filing on time.
-        File by {shortDate(FILING_DEADLINE)}
-        {daysLeft > 0 ? ` (${daysLeft} days away)` : " (already passed)"} and the
-        choice is yours. Miss it and a belated return, allowed until{" "}
-        {shortDate(BELATED_DEADLINE)}, is locked to the new regime — you lose the
-        option entirely, along with a late fee under section 234F, interest under
-        234A on anything unpaid, and the right to carry losses forward.
-        {recommended === "old" && comparison.saving > 0 ? (
-          <>
-            {" "}
-            For you specifically that would cost{" "}
-            <strong className="tnum">{inr(comparison.saving)}</strong> on top of
-            the fee, because the old regime is currently the cheaper one.
-          </>
-        ) : null}
-      </Callout>
-
-      {/* ---------------- working ---------------- */}
-      <Card>
-        <CardHeader
-          title="The arithmetic, line by line"
-          eyebrow={
-            <>
-              {state.regime} regime <ComputedTag />
-            </>
-          }
-          action={
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowWorking(!showWorking)}
-            >
-              {showWorking ? "Hide" : "Show"}
-            </Button>
-          }
-        />
-        {showWorking ? <Working computation={current} /> : null}
+      {/* ------------------------ deadline consequence ---------------------- */}
+      <Card tone="warn" className="mt-5 px-5 py-4">
+        <div className="text-[14px] font-semibold text-[color:var(--warn)]">
+          This choice has a deadline attached
+        </div>
+        <p className="mt-1.5 max-w-[52rem] text-[13.5px] leading-relaxed text-ink-soft">
+          File by {shortDate(FILING_DEADLINE)}
+          {daysLeft > 0 ? ` — ${daysLeft} days away — ` : " "}
+          and the regime is yours to pick. A belated return, allowed until{" "}
+          {shortDate(BELATED_DEADLINE)}, is locked to the new regime, which for
+          you would cost {inr(comparison.saving)} on top of the late fee under{" "}
+          <Term name="Section 234F">section 234F</Term>.
+        </p>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card tone="sunk">
-          <CardHeader title="What the old regime is sheltering" eyebrow="For you" />
-          <div className="px-4 py-3">
-            <Row
-              label="HRA exemption"
-              value={comparison.old.exemptAllowances}
-              note="section 10(13A)"
-            />
-            <Row label="Chapter VI-A deductions" value={comparison.old.chapterVIA} />
-            <Row
-              label="Professional tax"
-              value={comparison.old.professionalTax}
-            />
-            <Row
-              label="Standard deduction"
-              value={STANDARD_DEDUCTION.old}
-              note={`versus ${inr(STANDARD_DEDUCTION.new)} in the new regime`}
-            />
-            <Row
-              label="Total sheltered"
-              value={claimedOldRegimeShelter + STANDARD_DEDUCTION.old}
-              strong
-            />
-          </div>
-        </Card>
+      {/* --------------------------- the working ---------------------------- */}
+      <div className="mt-5">
+        <button
+          onClick={() =>
+            setShowWorking(showWorking ? null : (state.regime as Regime))
+          }
+          aria-expanded={Boolean(showWorking)}
+          className="border-b border-[color:var(--plum)] text-[13.5px] font-medium text-[color:var(--plum)]"
+        >
+          {showWorking
+            ? "Hide the slab-by-slab working"
+            : "See the slab-by-slab working"}
+        </button>
 
-        <Card tone="sunk">
-          <CardHeader title="The break-even" eyebrow="How much you would need" />
-          <div className="px-4 py-4">
-            <Stat
-              label="Old-regime shelter needed for it to win"
-              value={
-                Number.isFinite(breakEven) ? inr(breakEven) : "Not reachable"
-              }
-              tag={<ComputedTag />}
-              hint={
-                Number.isFinite(breakEven)
-                  ? "HRA exemption plus Chapter VI-A, at your income"
-                  : "no amount of deductions would flip it at this income"
-              }
-            />
-            <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
-              This is solved numerically against your actual income, not looked
-              up from a table: the same income is run through both regimes while a
-              single uncapped deduction is searched for the crossover. Below that
-              figure the new regime&rsquo;s wider slabs and larger standard
-              deduction win; above it, the old regime does. Your employer&rsquo;s
-              NPS contribution is left out of it, because 80CCD(2) applies either
-              way and so is not part of the trade-off.
-            </p>
-            <Link
-              href="/deductions"
-              className="mt-3 inline-block text-[13px] font-medium text-[color:var(--pine)] underline underline-offset-2"
-            >
-              Go and see what else you could claim
-            </Link>
+        {showWorking ? (
+          <div className="animate-rise mt-4">
+            <div className="mb-3 flex gap-1.5">
+              {(["new", "old"] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setShowWorking(r)}
+                  className={cx(
+                    "rounded-[var(--radius-pill)] border px-4 py-1.5 text-[13px] font-medium capitalize",
+                    showWorking === r
+                      ? "border-[color:var(--plum)] bg-[color:var(--plum)] text-white"
+                      : "border-line-strong bg-surface text-ink-soft",
+                  )}
+                >
+                  {r} regime
+                </button>
+              ))}
+            </div>
+            <Card>
+              <Working computation={comparison[showWorking]} />
+            </Card>
           </div>
-        </Card>
+        ) : null}
       </div>
 
-      <Callout tone="info" title="One thing this prototype assumes">
-        Slabs, the standard deduction, the section 87A rebate and every ceiling
-        here are the Finance Act 2025 position for FY 2025-26, assessed in AY
-        2026-27. A salaried person with no business income can switch regimes every
-        single year; anyone with business income needs{" "}
-        <Term name="Form 10-IEA">Form 10-IEA</Term> and gets one switch back in
-        their lifetime.
-      </Callout>
+      <div className="lg:hidden">
+        <FlowActionBar
+          note={
+            onRecommended
+              ? undefined
+              : `Staying on the ${state.regime} regime costs ${inr(comparison.saving)} more.`
+          }
+        >
+          {onRecommended ? (
+            <Button block size="lg" onClick={keepCurrent}>
+              Keep the {state.regime} regime
+            </Button>
+          ) : (
+            <Button
+              block
+              size="lg"
+              onClick={() => state.setRegime(recommended)}
+            >
+              Use the {recommended} regime
+            </Button>
+          )}
+          <LinkButton href="/filing" variant="secondary" size="lg" block>
+            Continue to review
+          </LinkButton>
+        </FlowActionBar>
+      </div>
     </div>
   );
 }
 
-/* ---------------------------------------------------------------- */
+/* ================================================================
+   The aligned table
+   ================================================================ */
 
-function RegimeCard({
-  regime,
-  computation,
-  selected,
-  recommended,
-  onSelect,
+function HeadCell({
+  title,
+  sub,
+  winner,
+  chosen,
 }: {
-  regime: Regime;
-  computation: TaxComputation;
-  selected: boolean;
-  recommended: boolean;
-  onSelect: () => void;
+  title?: string;
+  sub?: string;
+  winner?: boolean;
+  chosen?: boolean;
 }) {
+  if (!title) {
+    return <div className="border-b border-line px-5 py-4" />;
+  }
   return (
-    <Card
+    <div
       className={cx(
-        "transition-shadow",
-        selected && "ring-2 ring-[color:var(--pine)] ring-offset-2 ring-offset-[color:var(--paper)]",
+        "border-b px-5 py-4",
+        winner
+          ? "border-ok-100 bg-ok-50"
+          : "border-line border-l border-l-[color:var(--surface-sunk)]",
       )}
     >
-      <div className="flex items-start justify-between gap-2 border-b border-line px-4 py-3">
-        <div>
-          <div className="flex items-center gap-1.5">
-            <h3 className="font-display text-[17px] capitalize">{regime} regime</h3>
-            {recommended ? <Badge tone="ok">cheaper</Badge> : null}
-          </div>
-          <p className="text-[11.5px] text-ink-faint">
-            {regime === "new"
-              ? "Wider slabs, ₹75,000 standard deduction, almost no other deductions"
-              : "Narrower slabs, ₹50,000 standard deduction, the full deduction menu"}
-          </p>
-        </div>
-        {selected ? <Badge tone="pine">selected</Badge> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[15px] font-semibold">{title}</span>
+        {winner ? (
+          <span className="rounded-full bg-[color:var(--ok)] px-2.5 py-[3px] text-[11px] font-semibold text-white">
+            cheaper{chosen ? " · chosen" : ""}
+          </span>
+        ) : chosen ? (
+          <span className="rounded-full bg-plum-50 px-2.5 py-[3px] text-[11px] font-semibold text-[color:var(--plum)]">
+            chosen
+          </span>
+        ) : null}
       </div>
-
-      <div className="px-4 py-3.5">
-        <div className="eyebrow">Total tax</div>
-        <div
-          className={cx(
-            "tnum mt-0.5 font-display text-[30px] font-semibold leading-none",
-            recommended ? "text-[color:var(--ok)]" : "text-ink",
-          )}
-        >
-          {inr(computation.totalTaxLiability)}
-        </div>
-        <div className="mt-1 text-[12px] text-ink-faint">
-          {pct(computation.effectiveRate)} of your gross total income
-        </div>
-
-        <div className="mt-3 space-y-0">
-          <Row label="Taxable income" value={computation.totalIncome} />
-          <Row label="Tax on slabs" value={Math.round(computation.taxBeforeRebate)} />
-          {computation.rebate87A > 0 ? (
-            <Row
-              label="Rebate u/s 87A"
-              value={Math.round(computation.rebate87A)}
-              negative
-              tone="ok"
-            />
-          ) : null}
-          {computation.marginalRelief > 0 ? (
-            <Row
-              label="Marginal relief"
-              value={Math.round(computation.marginalRelief)}
-              negative
-              tone="ok"
-            />
-          ) : null}
-          {computation.surcharge > 0 ? (
-            <Row label="Surcharge" value={Math.round(computation.surcharge)} />
-          ) : null}
-          <Row label="Cess at 4%" value={Math.round(computation.cess)} />
-          <Row
-            label={computation.refundDue > 0 ? "Refund due" : "Still to pay"}
-            value={computation.refundDue || computation.taxPayable}
-            strong
-            tone={computation.refundDue > 0 ? "ok" : "alert"}
-          />
-        </div>
-      </div>
-
-      {!selected ? (
-        <div className="border-t border-line px-4 py-3">
-          <Button block variant="secondary" size="sm" onClick={onSelect}>
-            Use the {regime} regime
-          </Button>
-        </div>
+      {sub ? (
+        <div className="mt-0.5 text-[12.5px] text-ink-faint">{sub}</div>
       ) : null}
-    </Card>
+    </div>
   );
 }
+
+function CompareRow({
+  label,
+  sub,
+  newValue,
+  oldValue,
+  winner,
+  strong,
+  last,
+  mutedNew,
+  emphasiseWinner,
+}: {
+  label: string;
+  sub?: string;
+  newValue: string;
+  oldValue: string;
+  winner: Regime;
+  strong?: boolean;
+  last?: boolean;
+  mutedNew?: boolean;
+  emphasiseWinner?: boolean;
+}) {
+  const cell =
+    "px-5 text-right text-[14px] tnum " + (last ? "pb-[18px] pt-3" : "py-3");
+  const labelCell =
+    "px-5 text-[14px] " + (last ? "pb-[18px] pt-3" : "py-3");
+
+  return (
+    <>
+      <div
+        className={cx(
+          labelCell,
+          strong
+            ? "border-y border-line font-semibold text-ink"
+            : "text-ink-soft",
+        )}
+      >
+        {label}
+        {sub ? (
+          <span className="ml-1.5 text-[12.5px] text-ink-faint">{sub}</span>
+        ) : null}
+      </div>
+      <div
+        className={cx(
+          cell,
+          "border-l border-[color:var(--surface-sunk)]",
+          strong && "border-y border-y-line font-semibold",
+          mutedNew && "text-ink-faint",
+          winner === "new" && "bg-ok-tint",
+        )}
+      >
+        {newValue}
+      </div>
+      <div
+        className={cx(
+          cell,
+          "border-l border-ok-100",
+          strong && "border-y border-y-ok-100 font-semibold",
+          winner === "old" ? "bg-ok-tint" : "bg-transparent",
+          emphasiseWinner && winner === "old" && "font-semibold text-[color:var(--ok)]",
+        )}
+      >
+        {oldValue}
+      </div>
+    </>
+  );
+}
+
+function TotalRow({
+  newValue,
+  oldValue,
+  winner,
+}: {
+  newValue: number;
+  oldValue: number;
+  winner: Regime;
+}) {
+  return (
+    <>
+      <div className="border-t border-line px-5 py-4 text-[15px] font-semibold">
+        Total tax
+      </div>
+      <div
+        className={cx(
+          "border-l border-t border-line px-5 py-4 text-right",
+          winner === "new" && "bg-ok-50",
+        )}
+      >
+        <span
+          className={cx(
+            "tnum font-display text-[28px] sm:text-[30px]",
+            winner === "new" && "text-[color:var(--ok)]",
+          )}
+        >
+          {inr(newValue)}
+        </span>
+      </div>
+      <div
+        className={cx(
+          "border-l border-t px-5 py-4 text-right",
+          winner === "old" ? "border-ok-100 bg-ok-50" : "border-line",
+        )}
+      >
+        <span
+          className={cx(
+            "tnum font-display text-[28px] sm:text-[30px]",
+            winner === "old" && "text-[color:var(--ok)]",
+          )}
+        >
+          {inr(oldValue)}
+        </span>
+      </div>
+    </>
+  );
+}
+
+/* ================================================================
+   The arithmetic, in the order the Act applies it
+   ================================================================ */
 
 function Working({ computation: c }: { computation: TaxComputation }) {
   return (
@@ -362,7 +512,14 @@ function Working({ computation: c }: { computation: TaxComputation }) {
           </p>
         ) : (
           c.chapterVIABreakdown.map((b) => (
-            <Row key={b.label} label={b.label} value={b.amount} note={b.note} negative indent />
+            <Row
+              key={b.label}
+              label={b.label}
+              value={b.amount}
+              note={b.note}
+              negative
+              indent
+            />
           ))
         )}
         <Row
@@ -385,7 +542,7 @@ function Working({ computation: c }: { computation: TaxComputation }) {
         <Row label="Tax before rebate" value={Math.round(c.taxBeforeRebate)} strong />
         {c.rebate87A > 0 ? (
           <Row
-            label="Rebate u/s 87A"
+            label={<Term name="Section 87A">Rebate u/s 87A</Term>}
             value={Math.round(c.rebate87A)}
             negative
             indent
@@ -395,7 +552,7 @@ function Working({ computation: c }: { computation: TaxComputation }) {
         ) : null}
         {c.marginalRelief > 0 ? (
           <Row
-            label="Marginal relief"
+            label={<Term name="Marginal relief">Marginal relief</Term>}
             value={Math.round(c.marginalRelief)}
             negative
             indent
@@ -440,11 +597,14 @@ function explainRecommendation(
   breakEven: number,
   saving: number,
 ): string {
+  if (saving === 0) {
+    return "On the figures you have entered, the two regimes land on the same number.";
+  }
   if (recommended === "old") {
-    return `You are claiming ${inr(sheltered)} of exemptions and deductions that only exist under the old regime. That is past the ${Number.isFinite(breakEven) ? inr(breakEven) : "break-even"} crossover for your income, so the old regime's narrower slabs still work out cheaper — by ${inr(saving)}.`;
+    return `You are sheltering ${inr(sheltered)} of HRA and deductions that only exist under the old regime — past the ${Number.isFinite(breakEven) ? inr(breakEven) : "break-even"} crossover for your income.`;
   }
   if (!Number.isFinite(breakEven)) {
-    return `The new regime wins here whatever you claim — at your income there is no amount of old-regime deduction that would close the gap of ${inr(saving)}.`;
+    return `The new regime wins here whatever you claim — at your income there is no amount of old-regime shelter that would close the gap.`;
   }
-  return `The new regime's wider slabs and larger standard deduction beat what you are currently claiming. You would need around ${inr(breakEven)} of old-regime shelter before the two crossed over, and you are at ${inr(sheltered)}. The gap is ${inr(saving)}.`;
+  return `You would need around ${inr(breakEven)} of old-regime shelter before the two crossed over, and you are at ${inr(sheltered)}.`;
 }

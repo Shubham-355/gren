@@ -1,11 +1,25 @@
 /**
  * The copilot's tool surface.
  *
- * These declarations are sent to Gemini as `functionDeclarations`. Everything
- * here mutates (or reads) the same Zustand store the screens use — there are
- * no separate "assistant" copies of the data and no canned responses keyed to
- * phrases. If the model calls a tool, the app state genuinely changes and the
- * user sees a toast saying so.
+ * These declarations are sent to the language model as function declarations.
+ * Everything here mutates (or reads) the same Zustand store the screens use —
+ * there are no separate "assistant" copies of the data and no canned responses
+ * keyed to phrases. If the model calls a tool, the app state genuinely changes
+ * and the user sees it happen on the screen behind the panel.
+ *
+ * Risk tiers (§5.2):
+ *   Tier 1 — silent and logged:      navigate_to, explain_term,
+ *                                    check_refund_status
+ *   Tier 2 — done, shown, undoable:  switch_regime, add_deduction,
+ *                                    resolve_mismatch, raise_grievance,
+ *                                    prepare_submission
+ *   Tier 3 — needs an on-screen tap: submit_return, initiate_evc,
+ *                                    initiate_payment
+ *
+ * The Tier 3 tools are declared so the model can reach for them, but they
+ * refuse unless the user has tapped the confirmation card that
+ * prepare_submission (or the equivalent screen button) raised. A typed "yes"
+ * in the chat is never enough.
  */
 
 export const MODULES = {
@@ -65,7 +79,7 @@ export const GRIEVANCE_TOPICS = [
   "other",
 ] as const;
 
-/** Gemini uses the OpenAPI subset for parameter schemas. */
+/** Parameter schemas use the OpenAPI subset the model expects. */
 export type FunctionDeclaration = {
   name: string;
   description: string;
@@ -207,6 +221,42 @@ export const functionDeclarations: FunctionDeclaration[] = [
       properties: {},
     },
   },
+  {
+    name: "prepare_submission",
+    description:
+      "Assemble the whole return and put the final review card on the screen for the user to read and tap. Call this when the user says something like 'just file it for me'. It does NOT file anything — it is the step before that, and it is the only way to reach submit_return.",
+    parameters: {
+      type: "OBJECT",
+      properties: {},
+    },
+  },
+  {
+    name: "submit_return",
+    description:
+      "File the return with the department. IRREVERSIBLE. This only works after the user has tapped Confirm on the card raised by prepare_submission; it will refuse otherwise, and no amount of the user saying 'yes' or 'go ahead' in the chat substitutes for that tap. Do not call it speculatively — call prepare_submission and let the user act.",
+    parameters: {
+      type: "OBJECT",
+      properties: {},
+    },
+  },
+  {
+    name: "initiate_evc",
+    description:
+      "Start e-verification of a submitted return. IRREVERSIBLE, and gated the same way as submit_return: it raises the on-screen confirmation card, and only completes once the user has tapped it.",
+    parameters: {
+      type: "OBJECT",
+      properties: {},
+    },
+  },
+  {
+    name: "initiate_payment",
+    description:
+      "Start payment of self-assessment tax still due. IRREVERSIBLE, and gated the same way as submit_return: it raises the on-screen confirmation card, and only completes once the user has tapped it.",
+    parameters: {
+      type: "OBJECT",
+      properties: {},
+    },
+  },
 ];
 
 export type ToolCall = {
@@ -220,4 +270,21 @@ export type ToolOutcome = {
   summary: string;
   /** returned to the model so it can speak accurately about what happened */
   result: Record<string, unknown>;
+  /** the action-log entry this created, when it created one */
+  logId?: string;
+};
+
+/** Every tool, with the tier it belongs to. Used by the transcript and docs. */
+export const TOOL_TIERS: Record<string, 1 | 2 | 3> = {
+  navigate_to: 1,
+  explain_term: 1,
+  check_refund_status: 1,
+  switch_regime: 2,
+  add_deduction: 2,
+  resolve_mismatch: 2,
+  raise_grievance: 2,
+  prepare_submission: 2,
+  submit_return: 3,
+  initiate_evc: 3,
+  initiate_payment: 3,
 };

@@ -244,7 +244,7 @@ export default function ProfilePage() {
                 className={cx(
                   "mt-1 h-4 w-4 shrink-0 rounded-full border-2 disabled:opacity-35",
                   account.nominatedForRefund
-                    ? "border-[color:var(--pine)] bg-[color:var(--pine)] ring-2 ring-inset ring-white"
+                    ? "border-[color:var(--plum)] bg-[color:var(--plum)] ring-2 ring-inset ring-white"
                     : "border-line-strong",
                 )}
               />
@@ -255,7 +255,7 @@ export default function ProfilePage() {
                     {account.validated ? "Validated" : "Not validated"}
                   </Badge>
                   {account.nominatedForRefund ? (
-                    <Badge tone="pine">For refund</Badge>
+                    <Badge tone="plum">For refund</Badge>
                   ) : null}
                 </div>
                 <div className="mono mt-0.5 text-[12px] text-ink-faint">
@@ -288,7 +288,7 @@ export default function ProfilePage() {
           <ul className="max-h-72 divide-y divide-[color:var(--line)] overflow-y-auto">
             {state.actionLog.map((entry) => (
               <li key={entry.id} className="flex items-start gap-3 px-4 py-2.5">
-                <Badge tone={entry.actor === "copilot" ? "pine" : "neutral"}>
+                <Badge tone={entry.actor === "copilot" ? "plum" : "neutral"}>
                   {entry.actor}
                 </Badge>
                 <div className="min-w-0 flex-1">

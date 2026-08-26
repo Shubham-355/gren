@@ -82,7 +82,7 @@ export default function HelpPage() {
       {results.length === 0 ? (
         <Callout tone="info" title="Nothing matched">
           The glossary has {glossary.length} entries and does not cover everything.
-          Ask Sarathi instead — it will explain in plain language and tell you when
+          Ask TaxSaathi instead — it will explain in plain language and tell you when
           it is out of its depth.
         </Callout>
       ) : null}
@@ -146,7 +146,7 @@ export default function HelpPage() {
           <CardHeader title="Simulated" eyebrow="Looks real, is not" />
           <ul className="space-y-2.5 px-4 py-4">
             {[
-              "The taxpayer. Ananya Verma does not exist. The PAN is the documentation placeholder ABCDE1234F, the employer and banks are invented, and no real person's data is anywhere in this app.",
+              "The taxpayer. Ananya Verma does not exist. The PAN is a made-up sequence, AAAPZ1234C, the employer and banks are invented, and no real person's data is anywhere in this app.",
               "Login and OTP. No authentication happens. Any six digits work, and no message is sent to any number.",
               "Form 16, AIS, TIS and 26AS. Written by hand as seed data, including one deliberate mismatch, to give the reconciliation module something real to chew on.",
               "Submission. No return is transmitted to any authority. The acknowledgement number is generated locally.",
@@ -183,20 +183,20 @@ export default function HelpPage() {
           />
           <Row
             label="Copilot model"
-            value="Gemini with function calling"
+            value="A language model with function calling"
             note="The API key is held server-side in a Next.js route handler and never reaches the browser."
           />
         </div>
       </Card>
 
-      <Callout tone="pine" title="Still stuck?">
+      <Callout tone="plum" title="Still stuck?">
         The copilot can go deeper on any of these, and it knows what is on your
         screen while it does.{" "}
         <button
           onClick={() => setCopilotOpen(true)}
           className="font-medium underline underline-offset-2"
         >
-          Open Sarathi
+          Open TaxSaathi
         </button>
         .
       </Callout>
@@ -219,7 +219,7 @@ function FilterChip({
       className={cx(
         "rounded-[var(--radius-pill)] border px-3 py-1 text-[12.5px] font-medium transition-colors",
         active
-          ? "border-[color:var(--pine)] bg-[color:var(--pine)] text-white"
+          ? "border-[color:var(--plum)] bg-[color:var(--plum)] text-white"
           : "border-line-strong bg-surface text-ink-soft hover:bg-sunk",
       )}
     >

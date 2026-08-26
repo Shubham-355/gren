@@ -3,7 +3,8 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Badge, Button, cx } from "@/components/ui";
+import { CopilotStar } from "@/components/shell/AppShell";
+import { cx } from "@/components/ui";
 import { buildScreenContext, summariseContext } from "@/lib/copilot/context";
 import type { ToolCall, ToolOutcome } from "@/lib/copilot/tools";
 import { useAppStore, type CopilotMessage } from "@/lib/store/useAppStore";
@@ -17,21 +18,21 @@ function suggestionsFor(module: string, pendingCount: number): string[] {
   const base: Record<string, string[]> = {
     dashboard: [
       "What still needs doing before I can file?",
-      "Am I on the right tax regime?",
+      "Just file it for me",
     ],
     reconciliation: [
-      "What is the fixed deposit mismatch and should I accept it?",
-      "Resolve the dividend difference for me",
+      "What is the fixed deposit difference and should I accept it?",
+      "Settle all three for me",
     ],
     deductions: [
-      "What am I missing that I could still claim?",
+      "What else could I still claim?",
       "Add ₹50,000 under 80CCD(1B)",
     ],
     regime: [
-      "Why is this regime cheaper for me?",
-      "Switch me to the old regime",
+      "Show me the slab-by-slab working",
+      "Which regime is cheaper? Just put me on it",
     ],
-    salary: ["Explain what standard deduction does here"],
+    salary: ["Explain what the standard deduction does here"],
     "other-sources": ["Is my savings interest taxable if no tax was cut?"],
     filing: ["Walk me through what I am about to submit"],
     refund: ["Where is my refund?"],
@@ -46,10 +47,10 @@ function suggestionsFor(module: string, pendingCount: number): string[] {
     "Explain this page in plain language",
   ];
   if (pendingCount > 0 && module !== "reconciliation") {
-    return [`I have ${pendingCount} unresolved mismatches — help`, ...list].slice(
-      0,
-      3,
-    );
+    return [
+      `I have ${pendingCount} unresolved differences — help`,
+      ...list,
+    ].slice(0, 3);
   }
   return list.slice(0, 3);
 }
@@ -63,6 +64,9 @@ export function CopilotPanel() {
   const messages = useAppStore((s) => s.copilotMessages);
   const push = useAppStore((s) => s.pushCopilotMessage);
   const clear = useAppStore((s) => s.clearCopilot);
+  const actionCount = useAppStore(
+    (s) => s.actionLog.filter((a) => a.actor === "copilot" && !a.undone).length,
+  );
   const pendingCount = useAppStore(
     (s) =>
       Object.values(s.reconciliation).filter((r) => r.resolution === "pending")
@@ -107,13 +111,12 @@ export function CopilotPanel() {
     setInput("");
     setBusy(true);
 
-    const userMessage: CopilotMessage = {
+    push({
       id: rid(),
       role: "user",
       text: trimmed,
       at: new Date().toISOString(),
-    };
-    push(userMessage);
+    });
 
     const history = [...useAppStore.getState().copilotMessages].map((m) => ({
       role: m.role,
@@ -171,12 +174,6 @@ export function CopilotPanel() {
         })),
       });
 
-      const actions = outcomes.map((o) => ({
-        tool: o.name,
-        summary: o.summary,
-        ok: o.ok,
-      }));
-
       push({
         id: rid(),
         role: "assistant",
@@ -186,7 +183,12 @@ export function CopilotPanel() {
           outcomes.map((o) => o.summary).join(". ") ||
           "Done.",
         at: new Date().toISOString(),
-        actions,
+        actions: outcomes.map((o) => ({
+          tool: o.name,
+          summary: o.summary,
+          ok: o.ok,
+          logId: o.logId,
+        })),
         error: Boolean(second.error),
       });
     } catch (error) {
@@ -195,8 +197,8 @@ export function CopilotPanel() {
         role: "assistant",
         text:
           error instanceof Error
-            ? `Something went wrong reaching the copilot service: ${error.message}`
-            : "Something went wrong reaching the copilot service.",
+            ? `I could not reach the copilot service: ${error.message}. Nothing in your return was changed — the screens still work on their own.`
+            : "I could not reach the copilot service. Nothing in your return was changed.",
         at: new Date().toISOString(),
         error: true,
       });
@@ -211,39 +213,46 @@ export function CopilotPanel() {
     <>
       {open ? (
         <div
-          className="fixed inset-0 z-40 bg-[color:var(--ink)]/25 backdrop-blur-[1px] lg:hidden"
+          className="fixed inset-0 z-40 bg-[color:var(--ink)]/25 lg:hidden"
           onClick={() => setOpen(false)}
           aria-hidden
         />
       ) : null}
 
       <aside
-        aria-label="Sarathi copilot"
+        aria-label="AI copilot"
         aria-hidden={!open}
         className={cx(
-          "fixed bottom-0 right-0 z-50 flex w-full flex-col border-line bg-surface transition-transform duration-200 ease-out",
-          "h-[82vh] rounded-t-[var(--radius-lg)] border-t shadow-[var(--shadow-lg)]",
-          "sm:h-[min(38rem,88vh)] sm:bottom-4 sm:right-4 sm:w-[24rem] sm:rounded-[var(--radius-lg)] sm:border",
+          "fixed bottom-0 right-0 z-50 flex w-full flex-col bg-surface transition-transform duration-200 ease-out",
+          "h-[85dvh] rounded-t-[var(--radius-sheet)] border-t-[3px] border-[color:var(--petrol)] shadow-[var(--shadow-lg)]",
+          "lg:top-0 lg:h-dvh lg:w-[26rem] lg:rounded-none lg:border-l-[3px] lg:border-t-0 lg:shadow-[var(--shadow-copilot)]",
           open
-            ? "translate-y-0 opacity-100"
-            : "pointer-events-none translate-y-[110%] opacity-0 sm:translate-y-4",
+            ? "translate-y-0 opacity-100 lg:translate-x-0"
+            : "pointer-events-none translate-y-[110%] opacity-0 lg:translate-x-full lg:translate-y-0 lg:opacity-100",
         )}
       >
-        <header className="flex items-center gap-2.5 border-b border-line px-4 py-3">
-          <CopilotMark />
+        {/* ------------------------------ header ------------------------------ */}
+        <header className="flex items-center gap-3 border-b border-petrol-100 bg-petrol-50 px-5 py-4">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[color:var(--petrol)] text-white">
+            <CopilotStar size={18} />
+          </span>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="font-display text-[15px] font-semibold">Sarathi</span>
-              <Badge tone="pine">copilot</Badge>
+            <div className="text-[15px] font-semibold text-[color:var(--petrol)]">
+              Copilot
             </div>
-            <p className="truncate text-[11.5px] text-ink-faint">
+            <p className="truncate text-[12px] text-ink-soft">
               Reading your live return · {moduleKey}
             </p>
           </div>
+          {actionCount > 0 ? (
+            <span className="hidden text-[12.5px] text-[color:var(--petrol-400)] sm:block">
+              {actionCount} {actionCount === 1 ? "action" : "actions"}
+            </span>
+          ) : null}
           {messages.length > 0 ? (
             <button
               onClick={clear}
-              className="text-[12px] text-ink-faint hover:text-ink-soft"
+              className="text-[12.5px] text-ink-faint hover:text-ink-soft"
             >
               Clear
             </button>
@@ -251,36 +260,42 @@ export function CopilotPanel() {
           <button
             onClick={() => setOpen(false)}
             aria-label="Close copilot"
-            className="rounded-full p-1 text-ink-faint hover:bg-sunk hover:text-ink"
+            className="rounded-full p-1 text-ink-soft hover:text-ink"
           >
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
               <path
                 d="M5 5l10 10M15 5L5 15"
                 stroke="currentColor"
-                strokeWidth="1.6"
+                strokeWidth="1.7"
                 strokeLinecap="round"
               />
             </svg>
           </button>
         </header>
 
+        {/* the persistent "this is an AI" label required by §5.4 */}
+        <p className="border-b border-petrol-edge bg-petrol-soft px-5 py-2.5 text-[12px] text-[color:var(--petrol-400)]">
+          AI copilot — review anything it changes before you confirm.
+        </p>
+
         <div
           ref={scrollRef}
-          className="thin-scroll flex-1 space-y-3 overflow-y-auto px-4 py-4"
+          className="thin-scroll flex-1 space-y-3.5 overflow-y-auto px-5 py-5"
         >
           {messages.length === 0 ? (
             <div className="animate-rise">
-              <p className="text-[13.5px] leading-relaxed text-ink-soft">
-                I can see the screen you are on and the numbers in your return, and
-                I can change them for you — switch regime, accept an AIS figure, add
-                a deduction, raise a grievance. Ask in plain words.
+              <p className="text-[14px] leading-relaxed text-ink-soft">
+                I can see the screen you are on and the numbers in your return,
+                and I can change them — switch regime, settle an AIS difference,
+                add a deduction, raise a grievance. Filing, verifying and paying
+                stay with you.
               </p>
-              <div className="mt-3 space-y-1.5">
+              <div className="mt-4 space-y-2">
                 {suggestions.map((s) => (
                   <button
                     key={s}
                     onClick={() => void send(s)}
-                    className="block w-full rounded-[var(--radius-sm)] border border-line bg-sunk px-3 py-2 text-left text-[13px] text-ink-soft transition-colors hover:border-pine-100 hover:bg-pine-50 hover:text-[color:var(--pine-ink)]"
+                    className="block w-full rounded-[var(--radius-sm)] border border-line bg-paper px-3.5 py-2.5 text-left text-[13.5px] text-ink-soft transition-colors hover:border-petrol-100 hover:bg-petrol-50 hover:text-[color:var(--petrol-text)]"
                   >
                     {s}
                   </button>
@@ -301,14 +316,28 @@ export function CopilotPanel() {
           ) : null}
         </div>
 
+        {messages.length > 0 && !busy ? (
+          <div className="space-y-2 border-t border-line px-5 pt-3">
+            {suggestions.slice(0, 2).map((s) => (
+              <button
+                key={s}
+                onClick={() => void send(s)}
+                className="block w-full rounded-[var(--radius-sm)] border border-line bg-paper px-3.5 py-2.5 text-left text-[13.5px] text-ink-soft hover:bg-sunk"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <form
-          className="border-t border-line p-3"
+          className="border-t border-line p-4"
           onSubmit={(e) => {
             e.preventDefault();
             void send(input);
           }}
         >
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-2.5">
             <textarea
               ref={inputRef}
               rows={1}
@@ -321,29 +350,29 @@ export function CopilotPanel() {
                   void send(input);
                 }
               }}
-              placeholder="Ask about your return, or tell me to change it"
-              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-2.5 text-[14px] placeholder:text-ink-faint focus:border-[color:var(--pine-400)]"
+              placeholder="Ask, or tell me to change something"
+              className="max-h-28 min-h-[46px] flex-1 resize-none rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3.5 py-3 text-[14px] placeholder:text-ink-faint focus:border-[color:var(--petrol)]"
             />
-            <Button
+            <button
               type="submit"
-              size="md"
               disabled={busy || !input.trim()}
-              className="h-[42px] px-3"
               aria-label="Send"
+              className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[color:var(--petrol)] text-white transition-colors hover:bg-[color:var(--petrol-ink)] disabled:opacity-40"
             >
-              <svg width="17" height="17" viewBox="0 0 20 20" fill="none">
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
                 <path
                   d="M3 10h13M11 5l5 5-5 5"
                   stroke="currentColor"
-                  strokeWidth="1.7"
+                  strokeWidth="1.8"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               </svg>
-            </Button>
+            </button>
           </div>
-          <p className="mt-1.5 text-[10.5px] leading-snug text-ink-faint">
-            General guidance on a synthetic return, not professional tax advice.
+          <p className="mt-2 text-[11px] leading-snug text-ink-faint">
+            Actions are logged and reversible. Filing, e-verifying and paying
+            always stop for your tap. General guidance, not tax advice.
           </p>
         </form>
       </aside>
@@ -355,7 +384,7 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-[var(--radius)] rounded-br-sm bg-[color:var(--pine)] px-3 py-2 text-[13.5px] leading-relaxed text-white">
+        <div className="max-w-[84%] rounded-[16px] rounded-br-[4px] bg-[color:var(--plum)] px-3.5 py-2.5 text-[14px] leading-relaxed text-white">
           {message.text}
         </div>
       </div>
@@ -363,18 +392,18 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
   }
 
   return (
-    <div className="animate-rise space-y-2">
+    <div className="animate-rise space-y-2.5">
       <div
         className={cx(
-          "max-w-[92%] rounded-[var(--radius)] rounded-bl-sm border px-3 py-2 text-[13.5px] leading-relaxed",
+          "max-w-[92%] rounded-[16px] rounded-bl-[4px] border px-3.5 py-3 text-[14px] leading-relaxed",
           message.error
-            ? "border-[color:var(--alert)]/25 bg-alert-50 text-ink-soft"
-            : "border-line bg-sunk text-ink",
+            ? "border-alert-100 bg-alert-50 text-ink-soft"
+            : "border-petrol-edge bg-white text-[color:var(--petrol-text)]",
         )}
       >
         {message.text.split("\n").map((line, i) =>
           line.trim() ? (
-            <p key={i} className={i > 0 ? "mt-1.5" : undefined}>
+            <p key={i} className={i > 0 ? "mt-2" : undefined}>
               {line}
             </p>
           ) : null,
@@ -382,50 +411,71 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
       </div>
 
       {message.actions?.length ? (
-        <ul className="space-y-1">
-          {message.actions.map((a, i) => (
-            <li
-              key={i}
-              className={cx(
-                "flex items-start gap-1.5 rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-[11.5px]",
-                a.ok
-                  ? "border-pine-100 bg-pine-50 text-[color:var(--pine-ink)]"
-                  : "border-[color:var(--alert)]/25 bg-alert-50 text-[color:var(--alert)]",
-              )}
-            >
-              <span className="mt-px">{a.ok ? "✓" : "✕"}</span>
-              <span>
-                <span className="mono opacity-70">{a.tool}</span> — {a.summary}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="rounded-[14px] bg-petrol-50 px-3.5 py-3">
+          <div className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[color:var(--petrol-400)]">
+            Actions taken
+          </div>
+          <ul className="mt-2 space-y-2">
+            {message.actions.map((a, i) => (
+              <ActionRow key={i} action={a} />
+            ))}
+          </ul>
+          <p className="mt-2.5 text-[11.5px] leading-snug text-[color:var(--petrol-400)]">
+            Estimated from what you have told me so far. Everything reversible
+            is marked so.
+          </p>
+        </div>
       ) : null}
     </div>
   );
 }
 
-export function CopilotMark({ size = 30 }: { size?: number }) {
+function ActionRow({
+  action,
+}: {
+  action: NonNullable<CopilotMessage["actions"]>[number];
+}) {
+  const entry = useAppStore((s) =>
+    action.logId ? s.actionLog.find((a) => a.id === action.logId) : undefined,
+  );
+  const undoAction = useAppStore((s) => s.undoAction);
+
   return (
-    <span
-      className="flex shrink-0 items-center justify-center rounded-[10px] bg-[color:var(--pine)] text-white"
-      style={{ width: size, height: size }}
-      aria-hidden
-    >
-      <svg
-        width={size * 0.58}
-        height={size * 0.58}
-        viewBox="0 0 24 24"
-        fill="none"
+    <li className="flex items-start gap-2.5">
+      <span
+        className={cx(
+          "mt-px shrink-0 text-[13px] font-bold",
+          action.ok
+            ? "text-[color:var(--petrol)]"
+            : "text-[color:var(--alert)]",
+        )}
       >
-        <path
-          d="M12 3.5l2.1 4.9 5.4.5-4.1 3.5 1.2 5.2L12 14.9l-4.6 2.7 1.2-5.2-4.1-3.5 5.4-.5L12 3.5z"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
+        {action.ok ? "✓" : "✕"}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="mono block text-[11px] text-[color:var(--petrol-400)]">
+          {action.tool}
+        </span>
+        <span
+          className={cx(
+            "mt-0.5 block text-[13.5px] leading-snug",
+            entry?.undone
+              ? "text-ink-faint line-through"
+              : "text-[color:var(--petrol-ink)]",
+          )}
+        >
+          {action.summary}
+        </span>
+      </span>
+      {entry?.undo && !entry.undone ? (
+        <button
+          onClick={() => undoAction(entry.id)}
+          className="shrink-0 text-[12.5px] font-semibold text-[color:var(--petrol)] underline underline-offset-2"
+        >
+          Undo
+        </button>
+      ) : null}
+    </li>
   );
 }
 
@@ -448,7 +498,8 @@ async function postChat(body: unknown): Promise<ChatResponse> {
   const data = (await res.json().catch(() => ({}))) as ChatResponse;
   if (!res.ok) {
     return {
-      error: [data.error, data.detail].filter(Boolean).join(" ") ||
+      error:
+        [data.error, data.detail].filter(Boolean).join(" ") ||
         `The copilot service returned ${res.status}.`,
     };
   }

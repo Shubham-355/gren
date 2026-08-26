@@ -140,7 +140,7 @@ export function NoticeDetail({ notice }: { notice: Notice }) {
                     className={cx(
                       "flex w-full items-start gap-3 rounded-[var(--radius-sm)] border px-3.5 py-3 text-left transition-colors",
                       selected === action
-                        ? "border-[color:var(--pine)] bg-pine-50"
+                        ? "border-[color:var(--plum)] bg-plum-50"
                         : "border-line bg-surface hover:bg-sunk",
                     )}
                   >
@@ -148,7 +148,7 @@ export function NoticeDetail({ notice }: { notice: Notice }) {
                       className={cx(
                         "mt-1 h-4 w-4 shrink-0 rounded-full border-2",
                         selected === action
-                          ? "border-[color:var(--pine)] bg-[color:var(--pine)] ring-2 ring-inset ring-white"
+                          ? "border-[color:var(--plum)] bg-[color:var(--plum)] ring-2 ring-inset ring-white"
                           : "border-line-strong",
                       )}
                     />
@@ -174,7 +174,7 @@ export function NoticeDetail({ notice }: { notice: Notice }) {
                 value={detail}
                 onChange={(e) => setDetail(e.target.value)}
                 placeholder="For example: the fixed deposit is a joint account and the interest is declared by the first holder."
-                className="w-full resize-none rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-2.5 text-[14px] placeholder:text-ink-faint focus:border-[color:var(--pine-400)]"
+                className="w-full resize-none rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-2.5 text-[14px] placeholder:text-ink-faint focus:border-[color:var(--plum-400)]"
               />
             </div>
 
@@ -233,7 +233,7 @@ export function NoticeDetail({ notice }: { notice: Notice }) {
       ) : null}
 
       {notice.id === "notice-ecampaign-interest" ? (
-        <Callout tone="pine" title="This one connects to something you can fix now">
+        <Callout tone="plum" title="This one connects to something you can fix now">
           The interest in this notice is the same entry sitting unresolved in your{" "}
           <Link
             href="/reconciliation"

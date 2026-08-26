@@ -66,7 +66,7 @@ export function OutOfScope({
         <ul className="divide-y divide-[color:var(--line)]">
           {whatIsThere.map((item) => (
             <li key={item.label} className="px-4 py-3">
-              <div className="text-[13.5px] font-semibold text-[color:var(--pine-ink)]">
+              <div className="text-[13.5px] font-semibold text-[color:var(--plum-ink)]">
                 {item.label}
               </div>
               <p className="mt-0.5 text-[13px] leading-relaxed text-ink-soft">
@@ -85,7 +85,7 @@ export function OutOfScope({
           Back to income sources
         </Link>
         <Button variant="ghost" onClick={() => setCopilotOpen(true)}>
-          Ask Sarathi what is covered
+          Ask TaxSaathi what is covered
         </Button>
       </div>
     </div>

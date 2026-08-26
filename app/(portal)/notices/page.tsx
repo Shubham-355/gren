@@ -65,7 +65,7 @@ export default function NoticesPage() {
             <Link key={notice.id} href={`/notices/${notice.id}`} className="block">
               <Card
                 tone={needsReply ? "alert" : "plain"}
-                className="transition-colors hover:border-pine-100"
+                className="transition-colors hover:border-plum-100"
               >
                 <div className="px-4 py-3.5">
                   <div className="flex flex-wrap items-center gap-2">

@@ -19,6 +19,7 @@ import {
   type GrievanceTopicId,
   type Notice,
 } from "@/lib/data/seed";
+import { computeTax } from "@/lib/tax/compute";
 import type {
   DeductionInput,
   HousePropertyInput,
@@ -88,16 +89,65 @@ export type CopilotMessage = {
   text: string;
   at: string;
   /** actions the model actually performed on this turn */
-  actions?: { tool: string; summary: string; ok: boolean }[];
+  actions?: {
+    tool: string;
+    summary: string;
+    ok: boolean;
+    /** the action-log entry this produced, so the bubble can offer Undo */
+    logId?: string;
+  }[];
   error?: boolean;
 };
+
+/**
+ * How to put a Tier 2 action back. Every entry that carries one gets a visible
+ * one-tap "Undo" in the timeline and in the copilot transcript.
+ */
+export type UndoPayload =
+  | { kind: "regime"; previous: Regime; previouslyExplicit: boolean }
+  | { kind: "deduction"; section: keyof DeductionInput; previous: number }
+  | {
+      kind: "mismatch";
+      itemId: string;
+      previous: MismatchResolution;
+      previousAmount: number | null;
+    }
+  | { kind: "salary"; field: keyof SalaryInput; previous: number }
+  | { kind: "other-source"; field: keyof OtherSourcesInput; previous: number };
 
 export type ActionLogEntry = {
   id: string;
   at: string;
-  actor: "you" | "copilot";
+  actor: "you" | "copilot" | "system";
   tool: string;
   summary: string;
+  /** the effect on tax due, in rupees, signed: negative means tax fell */
+  delta?: number;
+  /** the arithmetic behind it, for the one-tap "Why?" */
+  why?: string;
+  undo?: UndoPayload;
+  undone?: boolean;
+};
+
+/**
+ * Tier 3 (§5.2): filing, e-verifying and paying never happen from a chat
+ * message. They raise this, which renders as an unmissable card in the
+ * product's own colours that the user has to tap.
+ */
+export type ConfirmationKind = "submit" | "everify" | "payment";
+
+export type PendingConfirmation = {
+  kind: ConfirmationKind;
+  createdAt: string;
+  title: string;
+  body: string;
+  lines: { label: string; value: string }[];
+  confirmLabel: string;
+  /** for the payment gate: how much is about to be paid */
+  amount?: number;
+  requestedBy: "you" | "copilot";
+  /** set only by a direct tap on the card; consumed by the acting tool */
+  acknowledged: boolean;
 };
 
 export type Toast = {
@@ -163,6 +213,12 @@ export type AppState = {
   copilotOpen: boolean;
   copilotMessages: CopilotMessage[];
   actionLog: ActionLogEntry[];
+  /** the Tier 3 gate, when one is open */
+  pendingConfirmation: PendingConfirmation | null;
+  /** the activity timeline sheet, on a phone */
+  timelineOpen: boolean;
+  /** an action log id whose "why" panel is open */
+  openWhy: string | null;
   toasts: Toast[];
   /** set by the copilot navigate_to tool; the shell consumes and clears it */
   pendingNavigation: string | null;
@@ -184,6 +240,8 @@ export type AppState = {
   setHra: (patch: Partial<HraInput>) => void;
 
   setRegime: (regime: Regime, actor?: ActionLogEntry["actor"]) => void;
+  /** locks in the regime already selected, without changing anything */
+  confirmRegime: (actor?: ActionLogEntry["actor"]) => void;
   setDeduction: (
     section: keyof DeductionInput,
     value: number | boolean,
@@ -212,9 +270,18 @@ export type AppState = {
   ) => ToolResult;
 
   setCopilotOpen: (open: boolean) => void;
+  setTimelineOpen: (open: boolean) => void;
+  setOpenWhy: (id: string | null) => void;
   pushCopilotMessage: (message: CopilotMessage) => void;
   clearCopilot: () => void;
   logAction: (entry: Omit<ActionLogEntry, "id" | "at">) => void;
+  undoAction: (id: string) => ToolResult;
+
+  requestConfirmation: (
+    confirmation: Omit<PendingConfirmation, "createdAt" | "acknowledged">,
+  ) => void;
+  acknowledgeConfirmation: () => void;
+  dismissConfirmation: () => void;
   pushToast: (toast: Omit<Toast, "id">) => void;
   dismissToast: (id: string) => void;
   requestNavigation: (href: string | null) => void;
@@ -377,6 +444,9 @@ const initialState = {
   copilotOpen: false,
   copilotMessages: [] as CopilotMessage[],
   actionLog: [] as ActionLogEntry[],
+  pendingConfirmation: null as PendingConfirmation | null,
+  timelineOpen: false,
+  openWhy: null as string | null,
   toasts: [] as Toast[],
   pendingNavigation: null as string | null,
   lastTouchedModule: null as string | null,
@@ -461,12 +531,19 @@ export const useAppStore = create<AppState>()(
 
       // ---------------- regime & deductions ----------------
       setRegime: (regime, actor = "you") => {
-        if (get().regime === regime) return;
+        const previous = get().regime;
+        if (previous === regime) return;
+        const previouslyExplicit = get().regimeChosenExplicitly;
+        const before = taxNow(get());
         set({ regime, regimeChosenExplicitly: true });
+        const after = taxNow(get());
         get().logAction({
           actor,
           tool: "switch_regime",
           summary: `Switched to the ${regime} tax regime`,
+          delta: after - before,
+          why: `Tax under the ${previous} regime was ₹${before.toLocaleString("en-IN")}; under the ${regime} regime it is ₹${after.toLocaleString("en-IN")}. Both are computed on the same return.`,
+          undo: { kind: "regime", previous, previouslyExplicit },
         });
         get().pushToast({
           tone: actor === "copilot" ? "copilot" : "success",
@@ -476,15 +553,39 @@ export const useAppStore = create<AppState>()(
         get().touchModule("regime");
       },
 
+      confirmRegime: (actor = "you") => {
+        if (get().regimeChosenExplicitly) return;
+        set({ regimeChosenExplicitly: true });
+        get().logAction({
+          actor,
+          tool: "confirm_regime",
+          summary: `Confirmed the ${get().regime} regime for this return`,
+          why: `Nothing changed — this only records that the ${get().regime} regime is a deliberate choice rather than the default.`,
+        });
+      },
+
       setDeduction: (section, value, actor = "you") => {
+        const previousRaw = get().deductions[section];
+        const before = taxNow(get());
         set((s) => ({
           deductions: { ...s.deductions, [section]: value } as DeductionInput,
         }));
         if (typeof value === "number") {
+          const after = taxNow(get());
           get().logAction({
             actor,
             tool: "add_deduction",
             summary: `Set ${sectionLabel(section)} to ₹${value.toLocaleString("en-IN")}`,
+            delta: after - before,
+            why:
+              get().regime === "new"
+                ? `Recorded, but the new regime does not allow ${sectionLabel(section)}, so your tax has not moved. It would apply the moment you switch to the old regime.`
+                : `₹${value.toLocaleString("en-IN")} under ${sectionLabel(section)} took your tax from ₹${before.toLocaleString("en-IN")} to ₹${after.toLocaleString("en-IN")} — statutory ceilings already applied.`,
+            undo: {
+              kind: "deduction",
+              section,
+              previous: typeof previousRaw === "number" ? previousRaw : 0,
+            },
           });
         }
         get().touchModule("deductions");
@@ -506,6 +607,11 @@ export const useAppStore = create<AppState>()(
             summary: `There is no reconciliation item called "${itemId}".`,
           };
         }
+
+        const before = get().reconciliation[itemId];
+        const taxBefore = taxNow(get());
+        const accepted =
+          resolution === "accepted" || resolution === "amount-corrected";
 
         const amount =
           resolution === "accepted"
@@ -531,8 +637,6 @@ export const useAppStore = create<AppState>()(
         // Reconciliation is only meaningful if a decision actually moves money
         // in or out of the return, so each resolution writes through to the
         // income heads the screens read from.
-        const accepted =
-          resolution === "accepted" || resolution === "amount-corrected";
         const field = OTHER_SOURCE_FIELD[itemId];
         if (field) {
           if (accepted) {
@@ -547,7 +651,26 @@ export const useAppStore = create<AppState>()(
         }
 
         const summary = resolutionSummary(entry, resolution, amount);
-        get().logAction({ actor, tool: "resolve_mismatch", summary });
+        const taxAfter = taxNow(get());
+        get().logAction({
+          actor,
+          tool: "resolve_mismatch",
+          summary,
+          delta: taxAfter - taxBefore,
+          why: `${entry.source} reported ₹${entry.aisAmount.toLocaleString("en-IN")}; you had declared ₹${entry.declaredAmount.toLocaleString("en-IN")}. ${
+            accepted
+              ? `Taking their figure adds ₹${amount.toLocaleString("en-IN")} to your income and claims the ₹${entry.tdsDeducted.toLocaleString("en-IN")} of tax already deducted on it.`
+              : "The amount stays out of your return, and the feedback goes back to the reporting entity."
+          }`,
+          undo: before
+            ? {
+                kind: "mismatch",
+                itemId,
+                previous: before.resolution,
+                previousAmount: before.resolvedAmount,
+              }
+            : undefined,
+        });
         get().pushToast({
           tone:
             actor === "copilot"
@@ -594,6 +717,7 @@ export const useAppStore = create<AppState>()(
       },
 
       submitReturn: (ack) => {
+        if (get().filing.submitted) return;
         set((s) => ({
           filing: {
             ...s.filing,
@@ -692,6 +816,110 @@ export const useAppStore = create<AppState>()(
       // ---------------- copilot surfaces ----------------
       setCopilotOpen: (copilotOpen) => set({ copilotOpen }),
 
+      setTimelineOpen: (timelineOpen) => set({ timelineOpen }),
+
+      setOpenWhy: (openWhy) => set({ openWhy }),
+
+      /**
+       * Tier 2 reversal. Puts the specific field back to what it was and marks
+       * the timeline entry undone rather than deleting it — the record of what
+       * happened is part of the point.
+       */
+      undoAction: (id) => {
+        const entry = get().actionLog.find((a) => a.id === id);
+        if (!entry?.undo) {
+          return { ok: false, summary: "There is nothing to undo there." };
+        }
+        if (entry.undone) {
+          return { ok: false, summary: "That has already been undone." };
+        }
+        const u = entry.undo;
+
+        switch (u.kind) {
+          case "regime":
+            set({ regime: u.previous, regimeChosenExplicitly: u.previouslyExplicit });
+            break;
+          case "deduction":
+            set((s) => ({
+              deductions: {
+                ...s.deductions,
+                [u.section]: u.previous,
+              } as DeductionInput,
+            }));
+            break;
+          case "salary":
+            set((s) => ({ salary: { ...s.salary, [u.field]: u.previous } }));
+            break;
+          case "other-source":
+            set((s) => ({
+              otherSources: { ...s.otherSources, [u.field]: u.previous },
+            }));
+            break;
+          case "mismatch": {
+            const seedEntry = aisEntries.find((e) => e.id === u.itemId);
+            set((s) => ({
+              reconciliation: {
+                ...s.reconciliation,
+                [u.itemId]: {
+                  id: u.itemId,
+                  resolution: u.previous,
+                  resolvedAmount: u.previousAmount,
+                  resolvedAt: u.previous === "pending" ? null : nowIso(),
+                },
+              },
+            }));
+            const field = OTHER_SOURCE_FIELD[u.itemId];
+            if (field && seedEntry) {
+              const restore =
+                u.previous === "accepted" || u.previous === "amount-corrected"
+                  ? (u.previousAmount ?? seedEntry.aisAmount)
+                  : seedEntry.declaredAmount;
+              set((s) => ({
+                otherSources: { ...s.otherSources, [field]: restore },
+              }));
+            }
+            break;
+          }
+        }
+
+        set((s) => ({
+          actionLog: s.actionLog.map((a) =>
+            a.id === id ? { ...a, undone: true } : a,
+          ),
+        }));
+        const summary = `Undone — ${entry.summary.charAt(0).toLowerCase()}${entry.summary.slice(1)}`;
+        get().pushToast({ tone: "info", title: "Undone", body: entry.summary });
+        return { ok: true, summary };
+      },
+
+      requestConfirmation: (confirmation) =>
+        set({
+          pendingConfirmation: {
+            ...confirmation,
+            createdAt: nowIso(),
+            acknowledged: false,
+          },
+        }),
+
+      /**
+       * Only ever called from a direct tap on the confirmation card. The
+       * acknowledgement is single-use: the acting tool clears it, so a second
+       * Tier 3 action needs its own fresh tap.
+       */
+      acknowledgeConfirmation: () =>
+        set((s) =>
+          s.pendingConfirmation
+            ? {
+                pendingConfirmation: {
+                  ...s.pendingConfirmation,
+                  acknowledged: true,
+                },
+              }
+            : {},
+        ),
+
+      dismissConfirmation: () => set({ pendingConfirmation: null }),
+
       pushCopilotMessage: (message) =>
         set((s) => ({ copilotMessages: [...s.copilotMessages, message] })),
 
@@ -721,8 +949,11 @@ export const useAppStore = create<AppState>()(
       touchModule: (lastTouchedModule) => set({ lastTouchedModule }),
     }),
     {
-      name: "sarathi-session-v1",
-      version: 1,
+      // Renamed with the redesign: the persisted shape gained the action
+      // timeline's undo payloads and the Tier 3 confirmation, and the seeded
+      // identity changed. A stale v1 session would show the old PAN.
+      name: "taxsaathi-session-v2",
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       // Rehydration is kicked off manually from a client effect so that the
       // first client render matches what the server sent.
@@ -750,6 +981,7 @@ export const useAppStore = create<AppState>()(
         grievances: s.grievances,
         copilotMessages: s.copilotMessages,
         actionLog: s.actionLog,
+        pendingConfirmation: s.pendingConfirmation,
       }),
     },
   ),
@@ -758,6 +990,15 @@ export const useAppStore = create<AppState>()(
 /** ------------------------------------------------------------------
  *  Derived selectors — used by the UI and by the copilot context builder
  *  ------------------------------------------------------------------ */
+
+/**
+ * Total tax as things currently stand. Used to record what each logged action
+ * actually did to the bottom line, so the timeline can say "−₹17,040" rather
+ * than just naming the action.
+ */
+function taxNow(s: AppState): number {
+  return computeTax(toTaxpayerInput(s)).totalTaxLiability;
+}
 
 export function sectionLabel(section: keyof DeductionInput): string {
   const labels: Record<keyof DeductionInput, string> = {

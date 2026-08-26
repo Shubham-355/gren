@@ -58,7 +58,7 @@ export default function RegisterPage() {
   function next() {
     if (step === 0) {
       if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan.trim().toUpperCase())) {
-        setError("PAN should look like ABCDE1234F — five letters, four digits, one letter.");
+        setError("PAN should look like AAAPZ1234C — five letters, four digits, one letter.");
         return;
       }
       if (form.name.trim().length < 3) {
@@ -114,7 +114,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="paper-grain flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-paper">
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4">
           <Link href="/">
@@ -148,7 +148,7 @@ export default function RegisterPage() {
                     value={form.pan}
                     maxLength={10}
                     onChange={(e) => set({ pan: e.target.value.toUpperCase() })}
-                    placeholder="ABCDE1234F"
+                    placeholder="AAAPZ1234C"
                     className="mono tracking-wider"
                   />
                 </Field>
@@ -207,7 +207,7 @@ export default function RegisterPage() {
                   label="Link my Aadhaar to this PAN"
                   description="Linking is mandatory. An unlinked PAN becomes inoperative, which means no refund, TDS at a higher rate, and returns that will not process."
                 />
-                <Callout tone="pine" title="What happens after this">
+                <Callout tone="plum" title="What happens after this">
                   We will pull the synthetic Form 16, AIS and 26AS for Assessment
                   Year 2026-27 into your account, work out both regimes on your real
                   numbers, and show you what needs your attention. You can change
@@ -239,7 +239,7 @@ export default function RegisterPage() {
           Already set up?{" "}
           <Link
             href="/login"
-            className="font-medium text-[color:var(--pine)] underline underline-offset-2"
+            className="font-medium text-[color:var(--plum)] underline underline-offset-2"
           >
             Sign in instead
           </Link>

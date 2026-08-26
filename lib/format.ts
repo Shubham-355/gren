@@ -10,6 +10,14 @@ export function inr(value: number, opts?: { decimals?: boolean }): string {
   }).format(n);
 }
 
+/**
+ * A signed rupee figure, using the same minus sign the rest of the UI uses.
+ * `inr(-64400)` gives "-₹64,400"; this gives "− ₹64,400".
+ */
+export function inrSigned(value: number): string {
+  return value < 0 ? `− ${inr(Math.abs(value))}` : inr(value);
+}
+
 export function inrPlain(value: number): string {
   const n = Number.isFinite(value) ? value : 0;
   return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n);

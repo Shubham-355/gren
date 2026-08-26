@@ -84,7 +84,7 @@ export default function RefundPage() {
               <Stat
                 label="Refund you would be owed"
                 value={inr(current.refundDue)}
-                tone="pine"
+                tone="plum"
                 tag={<ComputedTag />}
                 hint="on the figures currently in your return"
               />
@@ -96,7 +96,7 @@ export default function RefundPage() {
               </p>
               <Link
                 href="/filing"
-                className="mt-3 inline-flex rounded-[var(--radius-sm)] bg-[color:var(--pine)] px-4 py-2.5 text-[14px] font-medium text-white"
+                className="mt-3 inline-flex rounded-[var(--radius-sm)] bg-[color:var(--plum)] px-4 py-2.5 text-[14px] font-medium text-white"
               >
                 Go and file
               </Link>
@@ -157,7 +157,7 @@ export default function RefundPage() {
                           done &&
                             "border-[color:var(--ok)] bg-[color:var(--ok)] text-white",
                           active &&
-                            "border-[color:var(--pine)] bg-pine-50 text-[color:var(--pine-ink)]",
+                            "border-[color:var(--plum)] bg-plum-50 text-[color:var(--plum-ink)]",
                           !done &&
                             !active &&
                             "border-line-strong bg-surface text-ink-faint",
@@ -189,7 +189,7 @@ export default function RefundPage() {
                           {s.label}
                         </span>
                         {active ? (
-                          <span className="flex items-center gap-1 text-[11px] font-medium text-[color:var(--pine)]">
+                          <span className="flex items-center gap-1 text-[11px] font-medium text-[color:var(--plum)]">
                             <span className="animate-pulse-dot">●</span> now
                           </span>
                         ) : null}
@@ -259,7 +259,7 @@ export default function RefundPage() {
           action={
             <Link
               href="/history"
-              className="text-[13px] font-medium text-[color:var(--pine)]"
+              className="text-[13px] font-medium text-[color:var(--plum)]"
             >
               Full history
             </Link>

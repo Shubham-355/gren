@@ -163,7 +163,7 @@ export default function HistoryPage() {
                   {!state.filing.everified ? (
                     <Link
                       href="/filing/everify"
-                      className="rounded-[var(--radius-sm)] bg-[color:var(--pine)] px-3 py-1.5 text-[12.5px] font-medium text-white"
+                      className="rounded-[var(--radius-sm)] bg-[color:var(--plum)] px-3 py-1.5 text-[12.5px] font-medium text-white"
                     >
                       e-Verify
                     </Link>

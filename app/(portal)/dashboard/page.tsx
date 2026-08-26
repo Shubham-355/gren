@@ -1,491 +1,311 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 
-import { IconArrow } from "@/components/shell/Icons";
-import {
-  Badge,
-  Callout,
-  Card,
-  CardHeader,
-  ComputedTag,
-  DemoTag,
-  LinkButton,
-  Stat,
-  Term,
-  cx,
-} from "@/components/ui";
+import { Button, Card, LinkButton, cx } from "@/components/ui";
 import { notices as seededNotices } from "@/lib/data/seed";
-import { daysUntil, inr, shortDate } from "@/lib/format";
+import { FLOW_STEPS, nextStep, stepDone } from "@/lib/flow";
+import { inr } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
-import {
-  pendingMismatches,
-  refundStage,
-  useAppStore,
-} from "@/lib/store/useAppStore";
-import {
-  ASSESSMENT_YEAR,
-  BELATED_DEADLINE,
-  FILING_DEADLINE,
-  FINANCIAL_YEAR,
-} from "@/lib/tax/constants";
+import { pendingMismatches, useAppStore } from "@/lib/store/useAppStore";
 
+/**
+ * Step 2 — Home dashboard.
+ *
+ * It has to answer "what do I need to do right now" in under three seconds.
+ * One headline figure, one next action, everything else demoted. Not a menu of
+ * eighteen equal options.
+ */
 export default function DashboardPage() {
   const state = useAppStore();
   const { current, comparison } = useTax();
   const pending = pendingMismatches(state);
-  const stage = refundStage(state);
-  const daysLeft = daysUntil(FILING_DEADLINE);
+  const next = nextStep(state);
 
-  const openNotices = seededNotices.filter(
+  const openNotice = seededNotices.find(
     (n) => state.notices[n.id]?.status === "Open" && n.requiresResponse,
   );
 
-  const tasks = buildTaskList({
-    form16Imported: state.form16Imported,
-    pendingCount: pending.length,
-    regimeChosen: state.regimeChosenExplicitly,
-    recommended: comparison.recommended,
-    selected: state.regime,
-    saving: comparison.saving,
-    formSelected: Boolean(state.filing.formSelected),
-    submitted: state.filing.submitted,
-    everified: state.filing.everified,
-    taxPayable: current.taxPayable,
-    openNotices: openNotices.length,
-  });
+  const action = useMemo(
+    () => nextActionCopy(next.id, pending.length, comparison.recommended, state.regime),
+    [next.id, pending.length, comparison.recommended, state.regime],
+  );
 
-  const done = tasks.filter((t) => t.done).length;
+  const inRefund = current.refundDue > 0;
 
   return (
-    <div className="space-y-5">
-      {/* -------------------- greeting + status -------------------- */}
-      <div>
-        <div className="eyebrow">
-          Assessment Year {ASSESSMENT_YEAR} · income earned in FY{" "}
-          {FINANCIAL_YEAR}
-        </div>
-        <h1 className="mt-1 font-display text-[27px] leading-tight sm:text-[32px]">
-          {greeting()}, {state.profile.name.split(" ")[0]}.
-        </h1>
-        <p className="mt-1.5 max-w-prose text-[14.5px] leading-relaxed text-ink-soft">
-          {headline(state.filing.submitted, state.filing.everified, done, tasks.length)}
+    <div className="space-y-7">
+      {/* ------------------------------ headline ------------------------------ */}
+      <section>
+        <p className="eyebrow">
+          {greeting()}, {state.profile.name.split(" ")[0]}
         </p>
-      </div>
 
-      {/* -------------------- the one number that matters -------------------- */}
-      <Card tone={current.refundDue > 0 ? "ok" : current.taxPayable > 0 ? "alert" : "accent"}>
-        <div className="flex flex-wrap items-end justify-between gap-4 px-4 py-4">
+        <div className="mt-5 flex flex-col gap-6 sm:flex-row sm:items-end sm:gap-11">
           <div>
-            <div className="eyebrow">
-              {current.refundDue > 0
-                ? "Refund you are owed"
+            <div className="text-[13.5px] font-medium text-ink-soft">
+              {inRefund
+                ? "Your refund, as it stands"
                 : current.taxPayable > 0
-                  ? "Still to pay"
-                  : "Balance"}
-              <ComputedTag />
+                  ? "Still to pay, as it stands"
+                  : "Your position, as it stands"}
             </div>
             <div
               className={cx(
-                "tnum mt-1 font-display text-[38px] font-semibold leading-none sm:text-[44px]",
-                current.refundDue > 0
+                "tnum mt-1.5 font-display text-[56px] leading-none lg:text-[76px]",
+                inRefund
                   ? "text-[color:var(--ok)]"
                   : current.taxPayable > 0
                     ? "text-[color:var(--alert)]"
-                    : "text-[color:var(--pine)]",
+                    : "text-ink",
               )}
             >
-              {inr(current.refundDue || current.taxPayable || 0)}
+              {inr(inRefund ? current.refundDue : current.taxPayable)}
             </div>
-            <p className="mt-1.5 max-w-md text-[13px] leading-relaxed text-ink-soft">
-              {current.refundDue > 0
-                ? `Your total tax works out to ${inr(current.totalTaxLiability)}, and ${inr(current.tdsCredit + current.selfAssessmentTax)} has already been paid on your behalf. The difference comes back to you.`
-                : current.taxPayable > 0
-                  ? `Your total tax is ${inr(current.totalTaxLiability)} but only ${inr(current.tdsCredit + current.selfAssessmentTax)} has been paid so far.`
-                  : "What you owe and what has been paid are square."}
-            </p>
           </div>
-          <div className="flex flex-col items-start gap-2">
-            <Badge tone={state.regime === comparison.recommended ? "ok" : "warn"}>
-              {state.regime} regime
-              {state.regime === comparison.recommended
-                ? " · cheaper for you"
-                : ` · ${inr(comparison.saving)} more than the other`}
-            </Badge>
-            <LinkButton href="/regime" size="sm" variant="secondary">
-              See the working
-            </LinkButton>
+
+          <div className="flex gap-8 border-line pb-2.5 sm:flex-col sm:gap-3 sm:border-l sm:pl-8">
+            <div>
+              <div className="text-[12.5px] text-ink-faint">Total tax</div>
+              <div className="tnum text-[19px] font-medium">
+                {inr(current.totalTaxLiability)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[12.5px] text-ink-faint">Already deducted</div>
+              <div className="tnum text-[19px] font-medium">
+                {inr(current.tdsCredit)}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 border-t border-line px-4 py-3.5 sm:grid-cols-4">
-          <Stat
-            label="Gross total income"
-            value={inr(current.grossTotalIncome)}
-            tag={<ComputedTag />}
-          />
-          <Stat
-            label="Deductions claimed"
-            value={inr(current.chapterVIA + current.exemptAllowances + current.standardDeduction)}
-            hint="including standard deduction"
-          />
-          <Stat label="Total tax" value={inr(current.totalTaxLiability)} />
-          <Stat
-            label="Already paid"
-            value={inr(current.tdsCredit + current.selfAssessmentTax)}
-            hint={<>as <Term name="TDS">TDS</Term> and tax paid</>}
-          />
-        </div>
-      </Card>
+        <p className="mt-3.5 max-w-[36rem] text-[14.5px] leading-relaxed text-ink-soft">
+          {inRefund
+            ? `Tax of ${inr(current.totalTaxLiability)} against ${inr(current.tdsCredit)} already deducted. The difference comes back to you.`
+            : current.taxPayable > 0
+              ? `Tax of ${inr(current.totalTaxLiability)} against ${inr(current.tdsCredit)} already deducted. The shortfall is self-assessment tax.`
+              : "Tax due and tax already paid are square — nothing to pay, nothing to come back."}
+        </p>
+      </section>
 
-      {/* -------------------- deadline -------------------- */}
-      {!state.filing.submitted ? (
-        <Callout
-          tone={daysLeft <= 15 ? "alert" : daysLeft <= 45 ? "warn" : "info"}
-          title={
-            daysLeft > 0
-              ? `${daysLeft} days left to file`
-              : "The due date has passed"
-          }
-        >
-          {daysLeft > 0 ? (
-            <>
-              The due date for a salaried return this year is{" "}
-              {shortDate(FILING_DEADLINE)}. Miss it and you can still file a
-              belated return until {shortDate(BELATED_DEADLINE)}, but it costs a
-              late fee under section 234F — ₹1,000 if your income is under ₹5
-              lakh, ₹5,000 above that — plus interest at 1% a month on unpaid
-              tax, and you lose the right to carry any losses forward.
-            </>
-          ) : (
-            <>
-              You can still file a belated return until{" "}
-              {shortDate(BELATED_DEADLINE)}, with a late fee under section 234F
-              and interest under 234A on anything unpaid.
-            </>
-          )}
-        </Callout>
-      ) : null}
-
-      {/* -------------------- action items -------------------- */}
-      <Card>
-        <CardHeader
-          eyebrow={`${done} of ${tasks.length} done`}
-          title="What needs you"
-          description="In the order it makes sense to do it."
-        />
-        <ul className="divide-y divide-[color:var(--line)]">
-          {tasks.map((task) => (
-            <li key={task.id}>
-              <Link
-                href={task.href}
-                className={cx(
-                  "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-sunk",
-                  task.done && "opacity-55",
-                )}
-              >
-                <span
-                  className={cx(
-                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
-                    task.done
-                      ? "border-[color:var(--ok)] bg-[color:var(--ok)] text-white"
-                      : task.urgent
-                        ? "border-[color:var(--clay)] bg-clay-50 text-[color:var(--clay-ink)]"
-                        : "border-line-strong text-ink-faint",
-                  )}
-                >
-                  {task.done ? "✓" : task.urgent ? "!" : ""}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span
-                    className={cx(
-                      "block text-[14px] font-medium",
-                      task.done ? "text-ink-soft line-through" : "text-ink",
-                    )}
-                  >
-                    {task.label}
-                  </span>
-                  <span className="block text-[12.5px] leading-snug text-ink-faint">
-                    {task.detail}
-                  </span>
-                </span>
-                <IconArrow width={16} height={16} className="shrink-0 text-ink-faint" />
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </Card>
-
-      {/* -------------------- notices + refund -------------------- */}
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card>
-          <CardHeader
-            title="Notices"
-            eyebrow="From the department"
-            action={
-              <Link
-                href="/notices"
-                className="text-[13px] font-medium text-[color:var(--pine)]"
-              >
-                All {seededNotices.length}
-              </Link>
-            }
-          />
-          <div className="divide-y divide-[color:var(--line)]">
-            {seededNotices.slice(0, 2).map((n) => {
-              const s = state.notices[n.id];
-              return (
-                <Link
-                  key={n.id}
-                  href={`/notices/${n.id}`}
-                  className="block px-4 py-3 hover:bg-sunk"
-                >
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      tone={
-                        s?.status === "Open" && n.requiresResponse
-                          ? "warn"
-                          : s?.status === "Responded"
-                            ? "info"
-                            : "neutral"
-                      }
-                    >
-                      {n.section}
-                    </Badge>
-                    <span className="text-[11.5px] text-ink-faint">
-                      {shortDate(n.issuedOn)}
-                    </span>
-                    <DemoTag />
-                  </div>
-                  <div className="mt-1 text-[13.5px] font-medium leading-snug">
-                    {n.title}
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-[12.5px] leading-snug text-ink-soft">
-                    {n.plainLanguage}
-                  </p>
-                </Link>
-              );
-            })}
-          </div>
-        </Card>
-
-        <Card>
-          <CardHeader
-            title="Refund"
-            eyebrow="Where your money is"
-            action={
-              <Link
-                href="/refund"
-                className="text-[13px] font-medium text-[color:var(--pine)]"
-              >
-                Track
-              </Link>
-            }
-          />
-          <div className="px-4 py-4">
-            {stage === "not-filed" ? (
-              <p className="text-[13.5px] leading-relaxed text-ink-soft">
-                Nothing in the pipeline yet — a refund only starts moving once you
-                file and e-verify. Based on your current figures you would be owed{" "}
-                <strong className="tnum text-ink">
-                  {inr(current.refundDue)}
-                </strong>
-                .
-              </p>
-            ) : (
-              <>
-                <Stat
-                  label="Refund determined"
-                  value={inr(current.refundDue)}
-                  tone="ok"
-                  hint={`Stage: ${stage}`}
-                />
-                <p className="mt-2 text-[12.5px] leading-relaxed text-ink-soft">
-                  Going to{" "}
-                  {state.profile.bankAccounts.find((b) => b.nominatedForRefund)
-                    ?.bank ?? "no account nominated"}{" "}
-                  <DemoTag />
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:gap-9">
+        <div className="space-y-7">
+          {/* ------------------------- the one next action ------------------- */}
+          <Card tone="plum" className="p-6 lg:p-7">
+            <div className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-white/60">
+              Do this next
+            </div>
+            <div className="mt-2.5 flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-8">
+              <div className="min-w-0 flex-1">
+                <h2 className="font-display text-[26px] leading-[1.15] text-white lg:text-[32px]">
+                  {action.title}
+                </h2>
+                <p className="mt-2.5 max-w-[38rem] text-[14px] leading-relaxed text-white/[0.78] lg:text-[15px]">
+                  {action.body}
                 </p>
-              </>
-            )}
+              </div>
+              <div className="flex shrink-0 flex-col gap-2.5">
+                <LinkButton
+                  href={next.href}
+                  variant="onPlum"
+                  size="lg"
+                  className="font-semibold"
+                >
+                  {action.cta}
+                </LinkButton>
+                <span className="text-center text-[13px] text-white/60">
+                  {action.time}
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          {/* ------------------------- at a glance --------------------------- */}
+          <div className="grid gap-3.5 sm:grid-cols-3">
+            <GlanceCard
+              label="Gross total income"
+              value={inr(current.grossTotalIncome)}
+              hint="Salary, house property and other sources"
+            />
+            <GlanceCard
+              label="Deductions in effect"
+              value={inr(current.chapterVIA + current.standardDeduction)}
+              hint={
+                state.regime === "new"
+                  ? "Standard deduction and employer NPS"
+                  : "Standard deduction and Chapter VI-A"
+              }
+            />
+            <div className="rounded-[var(--radius)] border border-line bg-surface px-5 py-4">
+              <div className="text-[12.5px] text-ink-faint">Regime</div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
+                <span className="text-[22px] font-medium capitalize">
+                  {state.regime}
+                </span>
+                {comparison.recommended === state.regime ? (
+                  <span className="rounded-full bg-ok-50 px-2.5 py-1 text-[11.5px] font-semibold text-[color:var(--ok)]">
+                    cheaper for you
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-warn-50 px-2.5 py-1 text-[11.5px] font-semibold text-[color:var(--warn)]">
+                    {inr(comparison.saving)} more than the {comparison.recommended}
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 text-[12.5px] text-ink-faint">
+                {state.regimeChosenExplicitly
+                  ? "You chose this one"
+                  : "Recheck once your deductions are in"}
+              </div>
+            </div>
           </div>
-        </Card>
-      </div>
 
-      {/* -------------------- quick links -------------------- */}
-      <Card tone="sunk">
-        <CardHeader
-          title="Everything else"
-          description="Every module of the platform, one tap away."
-        />
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-b-[var(--radius)] bg-[color:var(--line)] sm:grid-cols-3">
-          {[
-            ["/income", "Income sources"],
-            ["/reconciliation", "AIS · TIS · 26AS"],
-            ["/deductions", "Deductions"],
-            ["/regime", "Regime & tax"],
-            ["/filing", "File return"],
-            ["/filing/everify", "e-Verify"],
-            ["/history", "Filing history"],
-            ["/refund", "Refund tracker"],
-            ["/notices", "Notices"],
-            ["/grievance", "Something is wrong"],
-            ["/profile", "Profile & bank"],
-            ["/help", "Help & jargon"],
-          ].map(([href, label]) => (
-            <Link
-              key={href}
-              href={href}
-              className="bg-surface px-3.5 py-3 text-[13px] font-medium text-ink-soft transition-colors hover:bg-pine-50 hover:text-[color:var(--pine-ink)]"
+          {/* ------------------------- secondary doors ----------------------- */}
+          <Link
+            href="/history"
+            className="flex items-center justify-between rounded-[var(--radius)] px-1 py-2 text-ink-soft hover:text-ink lg:hidden"
+          >
+            <span className="text-[13.5px] font-medium">
+              Filing history, notices, help
+            </span>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              {label}
-            </Link>
-          ))}
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          </Link>
         </div>
-      </Card>
 
-      <CopilotNudge />
+        {/* --------------------------- right column ------------------------- */}
+        <div className="space-y-3.5">
+          <Card className="px-5 py-4">
+            <div className="eyebrow">Still to do</div>
+            <ul className="mt-3.5 space-y-3.5">
+              {FLOW_STEPS.filter((s) => s.id !== "submit").map((step) => {
+                const done = stepDone(step.id, state);
+                const isNext = step.id === next.id;
+                const count =
+                  step.id === "reconcile" && !done ? pending.length : 0;
+                return (
+                  <li key={step.id}>
+                    <Link href={step.href} className="flex items-center gap-3">
+                      <span
+                        className={cx(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                          done && "bg-[color:var(--ok)] text-white",
+                          !done && count > 0 && "bg-[color:var(--alert)] text-white",
+                          !done && count === 0 && "border-[1.5px] border-line-strong",
+                        )}
+                      >
+                        {done ? "✓" : count > 0 ? count : null}
+                      </span>
+                      <span
+                        className={cx(
+                          "text-[14px]",
+                          done && "text-ink-faint line-through",
+                          isNext && "font-medium text-ink",
+                          !done && !isNext && "text-ink-soft",
+                        )}
+                      >
+                        {stepLabel(step.id)}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+
+          {openNotice ? (
+            <Card tone="warn" className="px-5 py-4">
+              <div className="text-[14px] font-semibold text-[color:var(--warn)]">
+                One notice is waiting
+              </div>
+              <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-soft">
+                {openNotice.title}. Settling the differences above usually closes
+                it on its own.
+              </p>
+              <Link
+                href={`/notices/${openNotice.id}`}
+                className="mt-2.5 inline-block border-b border-[color:var(--plum)] text-[13.5px] font-semibold text-[color:var(--plum)]"
+              >
+                Read the notice
+              </Link>
+            </Card>
+          ) : null}
+
+          <Card className="px-5 py-4">
+            <div className="eyebrow">Refund tracker</div>
+            <p className="mt-2.5 text-[13.5px] leading-relaxed text-ink-soft">
+              {state.filing.everified
+                ? "Verified and moving. Follow it stage by stage."
+                : state.filing.submitted
+                  ? "Submitted but not verified — nothing moves until it is."
+                  : "Nothing moving yet — a refund only starts once you file and verify."}
+            </p>
+            {state.filing.submitted ? (
+              <div className="mt-3">
+                <LinkButton href="/refund" variant="secondary" size="sm">
+                  Track it
+                </LinkButton>
+              </div>
+            ) : null}
+          </Card>
+
+          <details className="rounded-[var(--radius)] border border-line bg-surface px-5 py-4">
+            <summary className="cursor-pointer list-none text-[13.5px] font-medium text-ink-soft">
+              Reset this demo
+            </summary>
+            <p className="mt-2 text-[12.5px] leading-relaxed text-ink-faint">
+              Puts every figure, decision and timeline entry back to the seeded
+              starting point.
+            </p>
+            <div className="mt-3">
+              <ResetButton />
+            </div>
+          </details>
+        </div>
+      </div>
     </div>
   );
 }
 
 /* ---------------------------------------------------------------- */
 
-function CopilotNudge() {
-  const setOpen = useAppStore((s) => s.setCopilotOpen);
+function ResetButton() {
+  const resetDemo = useAppStore((s) => s.resetDemo);
   return (
-    <button
-      onClick={() => setOpen(true)}
-      className="w-full rounded-[var(--radius)] border border-dashed border-pine-100 bg-pine-50 px-4 py-3.5 text-left transition-colors hover:border-[color:var(--pine-400)]"
-    >
-      <div className="text-[13.5px] font-semibold text-[color:var(--pine-ink)]">
-        Not sure where to start?
-      </div>
-      <div className="mt-0.5 text-[12.5px] leading-snug text-ink-soft">
-        Ask Sarathi &ldquo;what still needs doing before I can file?&rdquo; — it can
-        see everything on this page and will take you to whatever is next.
-      </div>
-    </button>
+    <Button variant="secondary" size="sm" onClick={resetDemo}>
+      Reset demo data
+    </Button>
   );
 }
 
-type Task = {
-  id: string;
+function GlanceCard({
+  label,
+  value,
+  hint,
+}: {
   label: string;
-  detail: string;
-  href: string;
-  done: boolean;
-  urgent?: boolean;
-};
-
-function buildTaskList(o: {
-  form16Imported: boolean;
-  pendingCount: number;
-  regimeChosen: boolean;
-  recommended: "old" | "new";
-  selected: "old" | "new";
-  saving: number;
-  formSelected: boolean;
-  submitted: boolean;
-  everified: boolean;
-  taxPayable: number;
-  openNotices: number;
-}): Task[] {
-  const tasks: Task[] = [
-    {
-      id: "form16",
-      label: "Bring in your salary details",
-      detail: o.form16Imported
-        ? "Form 16 imported from Vermillion Systems"
-        : "One tap imports your Form 16 — salary, allowances and tax already deducted",
-      href: "/income/salary",
-      done: o.form16Imported,
-    },
-    {
-      id: "reconcile",
-      label:
-        o.pendingCount > 0
-          ? `Sort out ${o.pendingCount} difference${o.pendingCount === 1 ? "" : "s"} against your AIS`
-          : "Your return matches what the department already knows",
-      detail:
-        o.pendingCount > 0
-          ? "Income your bank reported that is not in your return yet. Leaving it triggers an automatic notice."
-          : "Every AIS entry has been accepted, corrected or sent back with feedback",
-      href: "/reconciliation",
-      done: o.pendingCount === 0,
-      urgent: o.pendingCount > 0,
-    },
-    {
-      id: "deductions",
-      label: "Claim what you are entitled to",
-      detail:
-        "Walk the guided questions, or fill sections directly if you already know them",
-      href: "/deductions",
-      done: o.regimeChosen,
-    },
-    {
-      id: "regime",
-      label:
-        o.selected === o.recommended
-          ? `You are on the ${o.selected} regime, which is the cheaper one`
-          : `The ${o.recommended} regime would save you ${inr(o.saving)}`,
-      detail:
-        o.selected === o.recommended
-          ? "Both regimes computed on your actual numbers"
-          : "Switch on the regime screen, or ask the copilot to do it",
-      href: "/regime",
-      done: o.selected === o.recommended,
-      urgent: o.selected !== o.recommended,
-    },
-  ];
-
-  if (o.taxPayable > 0) {
-    tasks.push({
-      id: "pay",
-      label: `Pay ${inr(o.taxPayable)} of self-assessment tax`,
-      detail: "Has to be paid before the return can be submitted",
-      href: "/filing/payment",
-      done: false,
-      urgent: true,
-    });
-  }
-
-  tasks.push(
-    {
-      id: "file",
-      label: o.submitted ? "Return submitted" : "Review and submit your return",
-      detail: o.submitted
-        ? "Acknowledgement generated"
-        : o.formSelected
-          ? "Form chosen — review the prefill and submit"
-          : "We will recommend the right form based on what you have entered",
-      href: "/filing",
-      done: o.submitted,
-    },
-    {
-      id: "verify",
-      label: o.everified ? "Return e-verified" : "e-Verify your return",
-      detail: o.everified
-        ? "Processing has started"
-        : "An unverified return is treated as never filed. You get 30 days.",
-      href: "/filing/everify",
-      done: o.everified,
-      urgent: o.submitted && !o.everified,
-    },
+  value: string;
+  hint: string;
+}) {
+  return (
+    <div className="rounded-[var(--radius)] border border-line bg-surface px-5 py-4">
+      <div className="text-[12.5px] text-ink-faint">{label}</div>
+      <div className="tnum mt-1.5 text-[22px] font-medium">{value}</div>
+      <div className="mt-2 text-[12.5px] leading-snug text-ink-faint">{hint}</div>
+    </div>
   );
-
-  if (o.openNotices > 0) {
-    tasks.push({
-      id: "notices",
-      label: `Respond to ${o.openNotices} notice${o.openNotices === 1 ? "" : "s"}`,
-      detail: "The department has asked you something and is waiting",
-      href: "/notices",
-      done: false,
-      urgent: true,
-    });
-  }
-
-  return tasks;
 }
 
 function greeting(): string {
@@ -495,17 +315,91 @@ function greeting(): string {
   return "Good evening";
 }
 
-function headline(
-  submitted: boolean,
-  everified: boolean,
-  done: number,
-  total: number,
-): string {
-  if (submitted && everified)
-    return "Your return is filed and verified. From here it is the department's move — track the refund below.";
-  if (submitted)
-    return "Your return is submitted but not verified yet. Until it is verified it does not count as filed.";
-  if (done === 0)
-    return "Nothing is filled in yet. Start by bringing in your salary details — it takes one tap and fills most of the return.";
-  return `${done} of ${total} steps done. Here is what is left.`;
+function stepLabel(id: string): string {
+  const labels: Record<string, string> = {
+    income: "Bring in your salary",
+    reconcile: "Settle the AIS differences",
+    deductions: "Claim your deductions",
+    regime: "Confirm the regime",
+    review: "Review and submit",
+    verify: "e-Verify the return",
+    refund: "Watch the refund land",
+  };
+  return labels[id] ?? id;
+}
+
+/**
+ * The next action, written as a sentence about the user's situation rather
+ * than as the name of a screen.
+ */
+function nextActionCopy(
+  id: string,
+  pending: number,
+  recommended: string,
+  regime: string,
+): { title: string; body: string; cta: string; time: string } {
+  switch (id) {
+    case "income":
+      return {
+        title: "Your employer has already told them most of this",
+        body: "Import the Form 16 and your salary, allowances and the tax already deducted fill themselves in. You only correct what looks wrong.",
+        cta: "Bring in my salary",
+        time: "about 1 minute",
+      };
+    case "reconcile":
+      return {
+        title:
+          pending === 1
+            ? "One thing your bank told them that your return does not say"
+            : `${pending} things your bank told them that your return does not say`,
+        body: "Each one gets a sentence explaining what happened and what it costs, and buttons that end it. Leaving them open is what turns into a 143(1) notice three months later.",
+        cta: pending === 1 ? "Review the difference" : "Review the differences",
+        time: "about 2 minutes",
+      };
+    case "deductions":
+      return {
+        title: "Now the part only you can answer",
+        body: "A short run of questions about your life — provident fund, insurance, rent, loans — and the running tax figure moves with every answer. No section numbers to hunt for.",
+        cta: "Answer the questions",
+        time: "about 3 minutes",
+      };
+    case "regime":
+      return {
+        title:
+          recommended === regime
+            ? `The ${regime} regime is the cheaper one for you`
+            : `The ${recommended} regime would cost you less`,
+        body: "Both are computed on the same return, line by line, side by side. Confirm the one you want and the choice is locked into the filing.",
+        cta: "See the comparison",
+        time: "about 1 minute",
+      };
+    case "review":
+      return {
+        title: "Everything, once more, before it is filed",
+        body: "The whole return on one screen, every section editable. Nothing is filed until you tap confirm on the card that follows.",
+        cta: "Review my return",
+        time: "about 2 minutes",
+      };
+    case "submit":
+      return {
+        title: "Your return is ready to file",
+        body: "One card, one tap. Filing is irreversible, so it is the one step nothing else on this platform can do for you.",
+        cta: "Go to review",
+        time: "about 1 minute",
+      };
+    case "verify":
+      return {
+        title: "Submitted — but not yet filed, in the eyes of the law",
+        body: "Until it is verified, the department treats the return as never filed. You have 30 days, and this takes about ten seconds.",
+        cta: "e-Verify now",
+        time: "about 10 seconds",
+      };
+    default:
+      return {
+        title: "Filed and verified. You are done for the year.",
+        body: "Nothing else is needed from you unless the department asks. The tracker below follows the refund from here.",
+        cta: "Track my refund",
+        time: "no action needed",
+      };
+  }
 }

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui";
 import { inr, shortDate } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
+import { buildPaymentConfirmation } from "@/lib/confirmations";
 import { useAppStore } from "@/lib/store/useAppStore";
 import { ASSESSMENT_YEAR } from "@/lib/tax/constants";
 
@@ -28,7 +29,6 @@ export default function PaymentPage() {
   const state = useAppStore();
   const { current } = useTax();
   const [method, setMethod] = useState<Method>("upi");
-  const [paying, setPaying] = useState(false);
 
   const due = current.taxPayable;
 
@@ -67,7 +67,7 @@ export default function PaymentPage() {
         </Callout>
         <Link
           href="/filing"
-          className="inline-flex rounded-[var(--radius-sm)] bg-[color:var(--pine)] px-5 py-3 text-[14px] font-medium text-white"
+          className="inline-flex rounded-[var(--radius-sm)] bg-[color:var(--plum)] px-5 py-3 text-[14px] font-medium text-white"
         >
           Back to filing
         </Link>
@@ -113,7 +113,7 @@ export default function PaymentPage() {
         <div className="flex gap-2">
           <Link
             href="/filing"
-            className="rounded-[var(--radius-sm)] bg-[color:var(--pine)] px-5 py-3 text-[14px] font-medium text-white"
+            className="rounded-[var(--radius-sm)] bg-[color:var(--plum)] px-5 py-3 text-[14px] font-medium text-white"
           >
             Continue to filing
           </Link>
@@ -200,19 +200,18 @@ export default function PaymentPage() {
             <Row label="Amount" value={due} strong />
           </div>
 
+          {/* Paying is Tier 3 (§5.2): the button raises the confirmation card
+              rather than moving money on its own. */}
           <Button
             block
             size="lg"
-            disabled={paying}
-            onClick={() => {
-              setPaying(true);
-              window.setTimeout(() => {
-                state.payTax(due);
-                setPaying(false);
-              }, 900);
-            }}
+            onClick={() =>
+              state.requestConfirmation(
+                buildPaymentConfirmation(useAppStore.getState(), "you"),
+              )
+            }
           >
-            {paying ? "Recording payment…" : `Pay ${inr(due)} (simulated)`}
+            Pay {inr(due)} (simulated)
           </Button>
         </div>
       </Card>

@@ -57,14 +57,14 @@ export default function GrievancePage() {
                 }}
                 className={cx(
                   "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors",
-                  topic === t.id ? "bg-pine-50" : "hover:bg-sunk",
+                  topic === t.id ? "bg-plum-50" : "hover:bg-sunk",
                 )}
               >
                 <span
                   className={cx(
                     "mt-1 h-4 w-4 shrink-0 rounded-full border-2",
                     topic === t.id
-                      ? "border-[color:var(--pine)] bg-[color:var(--pine)] ring-2 ring-inset ring-white"
+                      ? "border-[color:var(--plum)] bg-[color:var(--plum)] ring-2 ring-inset ring-white"
                       : "border-line-strong",
                   )}
                 />
@@ -99,7 +99,7 @@ export default function GrievancePage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={placeholderFor(topic!)}
-                className="w-full resize-none rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-2.5 text-[14px] leading-relaxed placeholder:text-ink-faint focus:border-[color:var(--pine-400)]"
+                className="w-full resize-none rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-2.5 text-[14px] leading-relaxed placeholder:text-ink-faint focus:border-[color:var(--plum-400)]"
               />
 
               <div className="rounded-[var(--radius-sm)] border border-line bg-sunk px-3.5 py-3">

@@ -145,7 +145,7 @@ export default function HousePropertyPage() {
                   </Callout>
                 ) : null}
 
-                <Callout tone="pine" title="The principal is claimed elsewhere">
+                <Callout tone="plum" title="The principal is claimed elsewhere">
                   Only interest belongs on this page. The principal portion of your
                   EMI —{" "}
                   <span className="tnum">

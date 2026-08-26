@@ -91,7 +91,7 @@ export default function IncomeOverviewPage() {
               <Term name="Gross Total Income">Gross total income</Term>
               <ComputedTag />
             </div>
-            <div className="tnum mt-1 font-display text-[28px] font-semibold leading-none text-[color:var(--pine-ink)]">
+            <div className="tnum mt-1 font-display text-[28px] font-semibold leading-none text-[color:var(--plum-ink)]">
               {inr(current.grossTotalIncome)}
             </div>
           </div>
@@ -126,7 +126,7 @@ export default function IncomeOverviewPage() {
             className={cx(
               "flex items-start gap-3 rounded-[var(--radius)] border bg-surface px-4 py-3.5 transition-colors",
               head.supported
-                ? "border-line hover:border-pine-100 hover:bg-pine-50/40"
+                ? "border-line hover:border-plum-100 hover:bg-plum-50/40"
                 : "border-dashed border-line-strong opacity-75 hover:opacity-100",
             )}
           >

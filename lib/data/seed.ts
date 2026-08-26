@@ -4,8 +4,8 @@
  * Every identifier, name, amount and document reference in this file is
  * invented for a hackathon prototype. There is no real taxpayer here, no real
  * PAN, no real Aadhaar, no real bank account, no real employer. PAN follows
- * the shape of a valid PAN so validation logic can be exercised, but
- * ABCDE1234F is the canonical documentation placeholder.
+ * the shape of a valid PAN so validation logic can be exercised, but it is a
+ * made-up sequence, not anyone's.
  *
  * Assessment Year 2026-27 (Financial Year 2025-26) throughout.
  */
@@ -36,12 +36,12 @@ export type Taxpayer = {
 
 export const taxpayer: Taxpayer = {
   name: "Ananya Verma",
-  pan: "ABCDE1234F",
+  pan: "AAAPZ1234C",
   aadhaarMasked: "XXXX XXXX 9012",
   dob: "1993-06-14",
   age: 33,
   email: "ananya.verma@example.invalid",
-  mobile: "+91 90000 00000",
+  mobile: "+91 90000 07742",
   address: {
     line1: "Flat 402, Juniper Court",
     line2: "Hosur Main Road",

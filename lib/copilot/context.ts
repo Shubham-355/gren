@@ -191,7 +191,7 @@ export function refundStageMeaning(stage: string): string {
 }
 
 /**
- * A compact human-readable rendering of the same snapshot. Gemini follows
+ * A compact human-readable rendering of the same snapshot. The model follows
  * numbers more reliably when they are labelled prose rather than raw JSON, so
  * both go into the prompt.
  */

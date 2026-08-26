@@ -1,4 +1,4 @@
-# Sarathi
+# TaxSaathi
 
 **An independent hackathon prototype reimagining income tax e-filing for salaried
 taxpayers in India. Not affiliated with the Income Tax Department, and not the
@@ -13,7 +13,7 @@ live from published FY 2025-26 rules.
 
 ```bash
 bun install
-cp .env.example .env.local     # then paste your Gemini key into it
+cp .env.example .env.local     # then paste your model API key into it
 bun run dev
 ```
 
@@ -21,9 +21,9 @@ Open http://localhost:3000, sign in with the pre-filled PAN and any six-digit
 OTP. No account is created and nothing leaves your browser except copilot
 messages.
 
-Without a `GEMINI_API_KEY` everything works except the copilot, which says so
-plainly instead of failing silently. Get a key at
-<https://aistudio.google.com/apikey>.
+Without a model API key everything works except the copilot, which says so
+plainly instead of failing silently. `.env.example` names the one variable it
+needs.
 
 ---
 
@@ -88,33 +88,63 @@ Implemented against **FY 2025-26 / Assessment Year 2026-27** (Finance Act 2025):
 
 ## The copilot
 
-A panel present on every screen, wired to **Gemini function calling**.
+A panel present on every screen, wired to real function calling.
 
 Each turn it is handed a structured snapshot of the live app state — the module
 you are in, your computed figures, your unresolved AIS mismatches, where you are
 in the filing flow — built by `lib/copilot/context.ts`. It answers from that,
 never from a canned phrase table.
 
-Seven tools, all of which mutate the same Zustand store the screens read from:
+Eleven tools, all of which read or mutate the same Zustand store the screens
+use, sorted into three risk tiers.
+
+**Tier 1 — silent, logged, no interruption**
 
 | Tool | What it actually does |
 | --- | --- |
 | `navigate_to(module)` | routes the app |
-| `switch_regime(regime)` | changes the regime and every dependent figure |
-| `add_deduction(section, amount)` | records a Chapter VI-A section |
-| `resolve_mismatch(item_id, resolution)` | settles an AIS gap and moves the income and TDS credit |
 | `explain_term(term)` | opens the platform's own glossary entry |
-| `raise_grievance(topic)` | creates a tracked ticket |
 | `check_refund_status()` | reads the refund pipeline |
 
-The turn is a proper two-phase loop: the model asks for tools, the client runs
-them against real state, the results are replayed to the model as
-`functionResponse` parts, and the model writes its reply knowing what actually
-happened. Every action raises a visible toast and lands in the activity log on
-`/profile`, so cause and effect is legible to someone watching the screen.
+**Tier 2 — done immediately, surfaced, undoable**
 
-The API key lives only in `app/api/chat/route.ts`, server-side. The browser
-talks to `/api/chat` and never to Google.
+| Tool | What it actually does |
+| --- | --- |
+| `switch_regime(regime)` | changes the regime and every dependent figure |
+| `add_deduction(section, amount)` | records a Chapter VI-A section; setting the same figure twice is a no-op |
+| `resolve_mismatch(item_id, resolution)` | settles an AIS gap and moves both the income and the TDS credit |
+| `raise_grievance(topic)` | creates a tracked ticket; the same topic twice in five minutes returns the first one |
+| `prepare_submission()` | assembles the return and raises the confirmation card — it does not file |
+
+Every Tier 2 action lands in the activity timeline with what it did to the tax
+due, a one-tap **Why?** into the arithmetic, and a one-tap **Undo**.
+
+**Tier 3 — stops for a tap on screen, every time**
+
+| Tool | What it actually does |
+| --- | --- |
+| `submit_return()` | files the return |
+| `initiate_evc()` | e-verifies it |
+| `initiate_payment()` | records self-assessment tax |
+
+These three refuse unless the user has already tapped the confirmation card for
+that exact action. Calling one raises the card and returns a structured refusal
+telling the model to say plainly that it cannot do this itself. The
+acknowledgement is single-use, so a "go ahead" three messages ago can never file
+a return. The card is rendered in the product's own plum, never the copilot's
+petrol, and is the same card the on-screen **Submit my return** button raises.
+
+The turn is a proper two-phase loop: the model asks for tools, the client runs
+them against real state, the results are replayed to the model as function
+responses, and the model writes its reply knowing what actually happened.
+Arguments are validated before anything is written, so a bad section name or an
+out-of-range amount comes back as a structured error the model can act on rather
+than a half-applied change. Every action raises a visible toast and lands in the
+persistent activity timeline, so cause and effect is legible to someone watching
+the screen rather than reading the chat.
+
+The API key lives only in `app/api/chat/route.ts`, server-side. The browser talks
+to `/api/chat` and never to the model provider.
 
 ---
 
@@ -134,7 +164,7 @@ Also rendered in-app at `/help#about`.
 **Simulated**
 
 - The taxpayer. Ananya Verma does not exist. PAN is the documentation
-  placeholder `ABCDE1234F`; employer, banks and landlord are invented.
+  synthetic `AAAPZ1234C`; employer, banks and landlord are invented.
 - Login and OTP. No authentication happens; any six digits work.
 - Form 16, AIS, TIS and 26AS — hand-written seed data, including one deliberate
   mismatch so the reconciliation module has something real to resolve.
@@ -158,7 +188,8 @@ Also rendered in-app at `/help#about`.
 
 ## The demo path
 
-1. Sign in — pre-filled PAN, any six digits.
+1. Sign in — pre-filled PAN, any six digits. The OTP verifies itself on the
+   sixth digit; there is no welcome interstitial afterwards.
 2. **Income → Salary** — import the Form 16. ₹18,40,000 gross, ₹2,45,000 already
    deducted.
 3. **AIS · TIS · 26AS** — three unresolved gaps. Fixed deposit interest of
@@ -168,13 +199,33 @@ Also rendered in-app at `/help#about`.
 4. **Deductions** — answer the guided questions instead of hunting for sections.
 5. **Regime** — the recommendation flips from new to old once the deductions are
    in, and the working is shown line by line.
-6. **File → e-Verify → Refund tracker.**
+6. **Review → Submit → e-Verify → Refund tracker.** Submitting and verifying
+   each stop for a confirmation card you have to tap.
 
-At any point, open the copilot and tell it to do one of those steps instead.
+At any point, open the copilot and tell it to do one of those steps instead —
+including "just file it for me", which assembles the whole return and then hands
+the card back to you.
+
+Everything either of you changes is in the **activity timeline**: the right-hand
+rail on a wide screen, the Activity tab on a phone. Each entry says what it did
+to the tax due, opens into the arithmetic behind it, and can be undone.
 
 ---
+
+## The design
+
+Plum `#4A2340` is the product: brand, primary action, product chrome. Petrol
+`#0F5F72` is the copilot and only ever the copilot — the product never uses it
+for its own actions, so "did I do that or did it?" is answerable at a glance.
+Instrument Serif carries headings and the payoff numbers; IBM Plex Sans, tabular,
+carries everything countable; IBM Plex Mono carries identifiers. Matched, check
+and action keep the same green, amber and red everywhere they recur.
+
+Every primary-flow screen is drawn mobile-first and widens into the desktop
+layout — the regime comparison becomes a true side-by-side, the activity
+timeline becomes a rail — rather than being two different designs.
 
 ## Stack
 
 Next.js 16 (App Router, Turbopack) · React 19 · Tailwind v4 · Zustand · Bun ·
-Gemini via a server-side route handler. No database.
+a language model reached through a server-side route handler. No database.

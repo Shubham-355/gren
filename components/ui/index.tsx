@@ -7,6 +7,7 @@ import {
   useId,
   useState,
   type ButtonHTMLAttributes,
+  type CSSProperties,
   type InputHTMLAttributes,
   type ReactNode,
 } from "react";
@@ -25,23 +26,40 @@ export function cx(...parts: (string | false | null | undefined)[]): string {
 export function Card({
   children,
   className,
+  style,
   tone = "plain",
   as: As = "section",
 }: {
   children: ReactNode;
   className?: string;
-  tone?: "plain" | "sunk" | "accent" | "alert" | "ok";
+  style?: CSSProperties;
+  tone?:
+    | "plain"
+    | "sunk"
+    | "accent"
+    | "alert"
+    | "ok"
+    | "warn"
+    | "copilot"
+    | "plum"
+    | "money";
   as?: "section" | "div" | "article" | "li";
 }) {
   const tones = {
     plain: "bg-surface border-line",
     sunk: "bg-sunk border-line",
-    accent: "bg-pine-50 border-pine-100",
-    alert: "bg-alert-50 border-[color:var(--alert)]/25",
-    ok: "bg-ok-50 border-[color:var(--ok)]/25",
+    accent: "bg-plum-50 border-plum-100",
+    alert: "bg-alert-50 border-alert-100",
+    ok: "bg-ok-50 border-ok-100",
+    warn: "bg-warn-50 border-warn-100",
+    copilot: "bg-petrol-50 border-petrol-100",
+    /* payoff surfaces: solid plum for the product, solid green for money */
+    plum: "bg-[color:var(--plum)] border-transparent text-white",
+    money: "bg-[color:var(--ok)] border-transparent text-white",
   } as const;
   return (
     <As
+      style={style}
       className={cx(
         "rounded-[var(--radius)] border shadow-[var(--shadow-sm)]",
         tones[tone],
@@ -65,12 +83,14 @@ export function CardHeader({
   description?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3.5">
+    <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-4 sm:px-5">
       <div className="min-w-0">
-        {eyebrow ? <div className="eyebrow mb-1">{eyebrow}</div> : null}
-        <h2 className="text-[17px] leading-snug">{title}</h2>
+        {eyebrow ? <div className="eyebrow mb-1.5">{eyebrow}</div> : null}
+        <h2 className="text-[20px] leading-[1.15]">{title}</h2>
         {description ? (
-          <p className="mt-1 text-[13px] text-ink-soft">{description}</p>
+          <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-soft">
+            {description}
+          </p>
         ) : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
@@ -93,18 +113,22 @@ const buttonBase =
 
 const buttonVariants = {
   primary:
-    "bg-[color:var(--pine)] text-white hover:bg-[color:var(--pine-ink)] shadow-[var(--shadow-sm)]",
+    "bg-[color:var(--plum)] text-white hover:bg-[color:var(--plum-deep)] shadow-[var(--shadow-sm)]",
   secondary:
     "bg-surface text-ink border border-line-strong hover:bg-sunk",
-  ghost: "text-[color:var(--pine)] hover:bg-pine-50",
+  ghost: "text-[color:var(--plum)] hover:bg-plum-50",
   danger: "bg-[color:var(--alert)] text-white hover:brightness-90",
   clay: "bg-[color:var(--clay)] text-white hover:bg-[color:var(--clay-ink)]",
+  /* the copilot's own colour — the product never uses it for its own actions */
+  copilot:
+    "bg-[color:var(--petrol)] text-white hover:bg-[color:var(--petrol-ink)] shadow-[var(--shadow-sm)]",
+  onPlum: "bg-white text-[color:var(--plum)] hover:bg-plum-50",
 } as const;
 
 const buttonSizes = {
-  sm: "text-[13px] px-3 py-1.5",
-  md: "text-[14px] px-4 py-2.5",
-  lg: "text-[15px] px-5 py-3",
+  sm: "text-[13px] h-[34px] px-3.5",
+  md: "text-[14.5px] h-[44px] px-5",
+  lg: "text-[16px] h-[52px] px-6",
 } as const;
 
 export function Button({
@@ -169,22 +193,22 @@ export function Badge({
   className,
 }: {
   children: ReactNode;
-  tone?: "neutral" | "ok" | "warn" | "alert" | "info" | "pine" | "clay";
+  tone?: "neutral" | "ok" | "warn" | "alert" | "info" | "plum" | "clay";
   className?: string;
 }) {
   const tones = {
     neutral: "bg-sunk text-ink-soft border-line-strong",
-    ok: "bg-ok-50 text-[color:var(--ok)] border-[color:var(--ok)]/25",
-    warn: "bg-warn-50 text-[color:var(--warn)] border-[color:var(--warn)]/25",
-    alert: "bg-alert-50 text-[color:var(--alert)] border-[color:var(--alert)]/25",
-    info: "bg-info-50 text-[color:var(--info)] border-[color:var(--info)]/25",
-    pine: "bg-pine-50 text-[color:var(--pine-ink)] border-pine-100",
-    clay: "bg-clay-50 text-[color:var(--clay-ink)] border-[color:var(--clay)]/25",
+    ok: "bg-ok-50 text-[color:var(--ok)] border-ok-100",
+    warn: "bg-warn-50 text-[color:var(--warn)] border-warn-100",
+    alert: "bg-alert-50 text-[color:var(--alert)] border-alert-100",
+    info: "bg-petrol-50 text-[color:var(--petrol)] border-petrol-100",
+    plum: "bg-plum-50 text-[color:var(--plum)] border-plum-100",
+    clay: "bg-clay-50 text-[color:var(--clay-ink)] border-warn-100",
   } as const;
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1 rounded-[var(--radius-pill)] border px-2 py-0.5 text-[11px] font-medium leading-5",
+        "inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] border px-2.5 py-1 text-[11.5px] font-semibold leading-4",
         tones[tone],
         className,
       )}
@@ -210,7 +234,7 @@ export function DemoTag({ label = "demo data" }: { label?: string }) {
 export function ComputedTag() {
   return (
     <span
-      className="ml-1.5 inline-flex select-none items-center rounded-[var(--radius-pill)] border border-pine-100 bg-pine-50 px-1.5 py-px align-middle text-[10px] font-medium uppercase tracking-wide text-[color:var(--pine-ink)]"
+      className="ml-1.5 inline-flex select-none items-center rounded-[var(--radius-pill)] border border-plum-100 bg-plum-50 px-1.5 py-px align-middle text-[10px] font-medium uppercase tracking-wide text-[color:var(--plum)]"
       title="Calculated live by this app from the rules in lib/tax."
     >
       computed
@@ -232,14 +256,14 @@ export function Stat({
   label: ReactNode;
   value: ReactNode;
   hint?: ReactNode;
-  tone?: "plain" | "ok" | "alert" | "pine";
+  tone?: "plain" | "ok" | "alert" | "plum";
   tag?: ReactNode;
 }) {
   const valueTone = {
     plain: "text-ink",
     ok: "text-[color:var(--ok)]",
     alert: "text-[color:var(--alert)]",
-    pine: "text-[color:var(--pine)]",
+    plum: "text-[color:var(--plum)]",
   } as const;
   return (
     <div className="min-w-0">
@@ -249,7 +273,7 @@ export function Stat({
       </div>
       <div
         className={cx(
-          "tnum mt-1 font-display text-[22px] font-semibold leading-tight",
+          "tnum mt-1.5 font-display text-[26px] leading-none",
           valueTone[tone],
         )}
       >
@@ -360,7 +384,7 @@ export function Field({
 }
 
 const inputClass =
-  "w-full rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-2.5 text-[15px] text-ink placeholder:text-ink-faint focus:border-[color:var(--pine-400)]";
+  "w-full rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3.5 py-3 text-[15px] text-ink placeholder:text-ink-faint focus:border-[color:var(--plum)]";
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cx(inputClass, props.className)} />;
@@ -440,7 +464,7 @@ export function Toggle({
       <span
         className={cx(
           "mt-0.5 flex h-6 w-10 shrink-0 items-center rounded-[var(--radius-pill)] p-0.5 transition-colors",
-          checked ? "bg-[color:var(--pine)]" : "bg-line-strong",
+          checked ? "bg-[color:var(--plum)]" : "bg-line-strong",
         )}
       >
         <span
@@ -537,7 +561,7 @@ export function Term({
       <button
         type="button"
         onClick={() => ctx?.setOpenTerm(open ? null : id)}
-        className="cursor-help border-b border-dotted border-[color:var(--pine-400)] text-inherit decoration-dotted underline-offset-2 hover:border-solid"
+        className="cursor-help border-b border-dotted border-[color:var(--plum)] text-[color:var(--plum)] decoration-dotted underline-offset-2 hover:border-solid"
         aria-expanded={open}
       >
         {children ?? entry.term}
@@ -556,7 +580,7 @@ export function Term({
           <span className="mt-2 flex items-center justify-between gap-2">
             <Link
               href={`/help#${slug(entry.term)}`}
-              className="text-[12px] font-medium text-[color:var(--pine)] underline underline-offset-2"
+              className="text-[12px] font-medium text-[color:var(--plum)] underline underline-offset-2"
               onClick={() => ctx?.setOpenTerm(null)}
             >
               Read more
@@ -595,16 +619,16 @@ export function PageHeader({
   aside?: ReactNode;
 }) {
   return (
-    <header className="mb-5">
+    <header className="mb-6">
       {eyebrow ? <div className="eyebrow mb-1.5">{eyebrow}</div> : null}
       <div className="flex items-start justify-between gap-4">
-        <h1 className="font-display text-[26px] leading-tight sm:text-[30px]">
+        <h1 className="font-display text-[32px] leading-[1.08] tracking-[-0.01em] sm:text-[44px]">
           {title}
         </h1>
         {aside}
       </div>
       {intro ? (
-        <p className="mt-2 max-w-prose text-[14.5px] leading-relaxed text-ink-soft">
+        <p className="mt-3 max-w-prose text-[15px] leading-relaxed text-ink-soft [text-wrap:pretty] sm:text-[16px]">
           {intro}
         </p>
       ) : null}
@@ -618,17 +642,17 @@ export function Callout({
   children,
   icon,
 }: {
-  tone?: "info" | "warn" | "alert" | "ok" | "pine";
+  tone?: "info" | "warn" | "alert" | "ok" | "plum";
   title?: ReactNode;
   children: ReactNode;
   icon?: ReactNode;
 }) {
   const tones = {
-    info: "bg-info-50 border-[color:var(--info)]/20 text-[color:var(--info)]",
-    warn: "bg-warn-50 border-[color:var(--warn)]/25 text-[color:var(--warn)]",
-    alert: "bg-alert-50 border-[color:var(--alert)]/25 text-[color:var(--alert)]",
-    ok: "bg-ok-50 border-[color:var(--ok)]/25 text-[color:var(--ok)]",
-    pine: "bg-pine-50 border-pine-100 text-[color:var(--pine-ink)]",
+    info: "bg-petrol-50 border-petrol-100 text-[color:var(--petrol)]",
+    warn: "bg-warn-50 border-warn-100 text-[color:var(--warn)]",
+    alert: "bg-alert-50 border-alert-100 text-[color:var(--alert)]",
+    ok: "bg-ok-50 border-ok-100 text-[color:var(--ok)]",
+    plum: "bg-plum-50 border-plum-100 text-[color:var(--plum)]",
   } as const;
   return (
     <div
@@ -688,7 +712,7 @@ export function ProgressTrack({
                   "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold",
                   done && "border-[color:var(--ok)] bg-[color:var(--ok)] text-white",
                   active &&
-                    "border-[color:var(--pine)] bg-pine-50 text-[color:var(--pine-ink)]",
+                    "border-[color:var(--plum)] bg-plum-50 text-[color:var(--plum-ink)]",
                   !done && !active && "border-line-strong bg-surface text-ink-faint",
                 )}
               >

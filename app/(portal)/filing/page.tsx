@@ -1,41 +1,51 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { FlowActionBar, PhoneStepHeader } from "@/components/shell/StepRail";
 import {
   Badge,
   Button,
   Callout,
   Card,
-  CardHeader,
   ComputedTag,
   DemoTag,
   PageHeader,
-  ProgressTrack,
-  Row,
   Stat,
   Term,
-  Toggle,
   cx,
 } from "@/components/ui";
-import { form16 } from "@/lib/data/seed";
-import { inr, shortDate } from "@/lib/format";
+import { buildSubmissionConfirmation } from "@/lib/confirmations";
+import { inr, inrSigned, shortDate } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
 import { pendingMismatches, useAppStore } from "@/lib/store/useAppStore";
+import { ASSESSMENT_YEAR } from "@/lib/tax/constants";
 import { recommendForm } from "@/lib/tax/formSelection";
-import { ASSESSMENT_YEAR, FINANCIAL_YEAR } from "@/lib/tax/constants";
 
+/**
+ * Step 7 — Review and submit.
+ *
+ * The last screen before it is legally filed. One figure, the whole return in
+ * collapsed sections, and a plain statement of what submitting means.
+ *
+ * The submit button does not submit. It raises the Tier 3 confirmation card
+ * (§5.2) — the same card the copilot's prepare_submission raises — because
+ * filing is irreversible and deserves a deliberate, unmissable tap.
+ */
 export default function FilingPage() {
-  const router = useRouter();
   const state = useAppStore();
   const { current, comparison } = useTax();
   const recommendation = recommendForm(state, current);
   const pending = pendingMismatches(state);
 
   const [declaration, setDeclaration] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [showDisqualifiers, setShowDisqualifiers] = useState(false);
+
+  const copilotEdits = state.actionLog.filter(
+    (a) => a.actor === "copilot" && !a.undone && a.undo,
+  ).length;
 
   const blockers = [
     pending.length > 0
@@ -58,7 +68,7 @@ export default function FilingPage() {
           hard: true,
         }
       : null,
-    state.regime !== comparison.recommended
+    state.regime !== comparison.recommended && comparison.saving > 0
       ? {
           id: "regime",
           text: `The ${comparison.recommended} regime would cost you ${inr(comparison.saving)} less`,
@@ -77,64 +87,138 @@ export default function FilingPage() {
   }[];
 
   const hardBlocked = blockers.some((b) => b.hard);
+  const form = state.filing.formSelected ?? recommendation.form;
 
   if (state.filing.submitted) {
     return <AlreadySubmitted />;
   }
 
-  function submit() {
-    const ack = `SYN${Math.floor(100_000_000_000 + Math.random() * 899_999_999_999)}`;
-    state.submitReturn(ack);
-    router.push("/filing/confirmation");
+  function openConfirmation() {
+    state.confirmReview();
+    state.requestConfirmation(
+      buildSubmissionConfirmation(useAppStore.getState(), "you"),
+    );
   }
 
-  return (
-    <div className="space-y-5">
-      <PageHeader
-        eyebrow={`Filing · AY ${ASSESSMENT_YEAR}`}
-        title="Review and submit"
-        intro="Everything below was assembled from what you entered and what the department already holds. Read it, change anything that is wrong, then submit."
-      />
+  const refundAccount = state.profile.bankAccounts.find(
+    (b) => b.nominatedForRefund,
+  );
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_16rem]">
-        <div className="space-y-5">
-          {/* -------- form selection -------- */}
-          <Card>
-            <CardHeader
-              title="Which form applies to you"
-              eyebrow="Step 1"
-              action={<Badge tone="pine">{recommendation.form}</Badge>}
-            />
-            <div className="px-4 py-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                {(["ITR-1", "ITR-2"] as const).map((f) => {
-                  const chosen =
-                    (state.filing.formSelected ?? recommendation.form) === f;
-                  const isRecommended = recommendation.form === f;
-                  return (
+  return (
+    <div>
+      <PhoneStepHeader back={{ href: "/regime" }} />
+
+      <div className="grid gap-7 lg:grid-cols-[1fr_360px] lg:gap-9">
+        <div>
+          <h1 className="font-display text-[34px] leading-[1.08] tracking-[-0.015em] sm:text-[52px] sm:leading-[1.04]">
+            Everything, once more
+          </h1>
+          <p className="mt-3.5 max-w-[34rem] text-[15px] leading-relaxed text-ink-soft [text-wrap:pretty] sm:text-[16.5px]">
+            Nothing is filed yet. Open any section to change it — the refund
+            figure moves with you.
+          </p>
+
+          {/* ------------------------ blockers ------------------------ */}
+          {blockers.length > 0 ? (
+            <Card
+              tone={hardBlocked ? "alert" : "warn"}
+              className="mt-6 overflow-hidden"
+            >
+              <div className="border-b border-inherit px-5 py-3">
+                <span className="text-[14px] font-semibold">
+                  {hardBlocked
+                    ? "One thing has to happen first"
+                    : "Worth a look before you file"}
+                </span>
+              </div>
+              <ul>
+                {blockers.map((b) => (
+                  <li key={b.id}>
+                    <Link
+                      href={b.href}
+                      className="flex items-start gap-3 px-5 py-3.5 hover:bg-black/[0.03]"
+                    >
+                      <span
+                        className={cx(
+                          "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white",
+                          b.hard
+                            ? "bg-[color:var(--alert)]"
+                            : "bg-[color:var(--warn)]",
+                        )}
+                      >
+                        !
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[14px] font-medium">
+                          {b.text}
+                        </span>
+                        <span className="block text-[12.5px] leading-snug text-ink-soft">
+                          {b.detail}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[12.5px] font-semibold text-[color:var(--plum)]">
+                        Fix
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
+
+          {/* ------------------------ the return ------------------------ */}
+          <Card className="mt-6 overflow-hidden">
+            <div className="flex items-start justify-between gap-3 border-b border-[color:var(--surface-sunk)] px-5 py-4">
+              <div className="min-w-0">
+                <div className="text-[15px] font-semibold">Personal &amp; PAN</div>
+                <div className="mt-1 text-[13.5px] text-ink-faint">
+                  {state.profile.name} · PAN {state.profile.pan}
+                  <DemoTag label="synthetic" /> · AY {ASSESSMENT_YEAR} ·{" "}
+                  <button
+                    onClick={() => setShowForm(!showForm)}
+                    className="font-medium text-[color:var(--plum)] underline underline-offset-2"
+                  >
+                    {form}
+                  </button>
+                </div>
+              </div>
+              <Link
+                href="/profile"
+                className="shrink-0 text-[13.5px] font-medium text-[color:var(--plum)]"
+              >
+                Edit
+              </Link>
+            </div>
+
+            {showForm ? (
+              <div className="animate-rise border-b border-[color:var(--surface-sunk)] bg-paper px-5 py-4">
+                <div className="eyebrow mb-2">
+                  Why {recommendation.form} <ComputedTag />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {(["ITR-1", "ITR-2"] as const).map((f) => (
                     <button
                       key={f}
                       onClick={() => state.selectForm(f)}
                       className={cx(
-                        "rounded-[var(--radius-sm)] border px-3.5 py-3 text-left transition-colors",
-                        chosen
-                          ? "border-[color:var(--pine)] bg-pine-50"
+                        "rounded-[var(--radius-sm)] border px-4 py-3 text-left transition-colors",
+                        form === f
+                          ? "border-[color:var(--plum)] bg-plum-50"
                           : "border-line bg-surface hover:bg-sunk",
                       )}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="font-display text-[16px] font-semibold">
-                          {f}
-                        </span>
-                        {isRecommended ? (
+                      <span className="flex items-center gap-2">
+                        <span className="font-display text-[17px]">{f}</span>
+                        {recommendation.form === f ? (
                           <Badge tone="ok">recommended</Badge>
                         ) : null}
-                      </div>
+                      </span>
                       <p className="mt-1 text-[12.5px] leading-snug text-ink-soft">
                         {f === "ITR-1" ? (
                           <>
-                            <Term name="ITR-1">Sahaj</Term> — resident individual,
-                            salary, one house property, income up to ₹50 lakh
+                            <Term name="ITR-1">Sahaj</Term> — resident
+                            individual, salary, one house property, income up to
+                            ₹50 lakh
                           </>
                         ) : (
                           <>
@@ -145,15 +229,9 @@ export default function FilingPage() {
                         )}
                       </p>
                     </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-4 rounded-[var(--radius-sm)] border border-line bg-sunk px-3.5 py-3">
-                <div className="eyebrow mb-1.5">
-                  Why {recommendation.form} <ComputedTag />
+                  ))}
                 </div>
-                <ul className="space-y-1">
+                <ul className="mt-3 space-y-1">
                   {recommendation.reasons.map((r) => (
                     <li
                       key={r}
@@ -166,7 +244,7 @@ export default function FilingPage() {
                 </ul>
                 <button
                   onClick={() => setShowDisqualifiers(!showDisqualifiers)}
-                  className="mt-2 text-[12px] font-medium text-[color:var(--pine)] underline underline-offset-2"
+                  className="mt-2.5 text-[12.5px] font-medium text-[color:var(--plum)] underline underline-offset-2"
                 >
                   {showDisqualifiers ? "Hide" : "Show"} the eight rules that were
                   checked
@@ -191,200 +269,235 @@ export default function FilingPage() {
                   </ul>
                 ) : null}
               </div>
-            </div>
-          </Card>
+            ) : null}
 
-          {/* -------- blockers -------- */}
-          {blockers.length > 0 ? (
-            <Card tone={hardBlocked ? "alert" : "plain"}>
-              <CardHeader
-                title="Before you submit"
-                eyebrow="Step 2"
-                action={
-                  <Badge tone={hardBlocked ? "alert" : "warn"}>
-                    {blockers.length} to look at
-                  </Badge>
-                }
+            <ReviewSection title="Income" href="/income/salary">
+              <MiniLine
+                label={`Salary, after ${state.regime === "old" ? "HRA and " : ""}standard deduction`}
+                value={inr(current.incomeFromSalary)}
               />
-              <ul className="divide-y divide-[color:var(--line)]">
-                {blockers.map((b) => (
-                  <li key={b.id}>
-                    <Link
-                      href={b.href}
-                      className="flex items-start gap-3 px-4 py-3 hover:bg-sunk"
-                    >
-                      <span
-                        className={cx(
-                          "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white",
-                          b.hard
-                            ? "bg-[color:var(--alert)]"
-                            : "bg-[color:var(--clay)]",
-                        )}
-                      >
-                        !
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[13.5px] font-medium">
-                          {b.text}
-                        </span>
-                        <span className="block text-[12.5px] leading-snug text-ink-soft">
-                          {b.detail}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-[12px] font-medium text-[color:var(--pine)]">
-                        Fix
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ) : (
-            <Callout tone="ok" title="Nothing is blocking you">
-              Your AIS is reconciled, you are on the cheaper regime, and there is no
-              tax outstanding.
-            </Callout>
-          )}
+              {state.houseProperty.enabled ? (
+                <MiniLine
+                  label="House property"
+                  value={inrSigned(current.incomeFromHouseProperty)}
+                />
+              ) : null}
+              <MiniLine
+                label="Interest and dividend"
+                value={inr(current.incomeFromOtherSources)}
+              />
+              <MiniLine
+                label="Gross total income"
+                value={inr(current.grossTotalIncome)}
+                strong
+              />
+            </ReviewSection>
 
-          {/* -------- the return itself -------- */}
-          <Card>
-            <CardHeader
-              title="What you are about to submit"
-              eyebrow="Step 3 · prefilled, editable"
-              description={`${state.filing.formSelected ?? recommendation.form} for AY ${ASSESSMENT_YEAR}, income earned in FY ${FINANCIAL_YEAR}`}
-            />
+            <ReviewSection
+              title={
+                <>
+                  Deductions{" "}
+                  <span className="font-normal text-ink-faint">
+                    · {state.regime} regime
+                  </span>
+                </>
+              }
+              href="/deductions"
+            >
+              {current.chapterVIABreakdown.length === 0 ? (
+                <p className="py-1 text-[13.5px] text-ink-faint">
+                  None claimable under the {state.regime} regime.
+                </p>
+              ) : (
+                current.chapterVIABreakdown.map((b) => (
+                  <MiniLine key={b.label} label={b.label} value={inr(b.amount)} />
+                ))
+              )}
+              <MiniLine
+                label="Total income"
+                value={inr(current.totalIncome)}
+                strong
+              />
+            </ReviewSection>
 
-            <div className="space-y-4 px-4 py-4">
-              <ReviewBlock
-                title="Personal information"
+            <div className="flex items-center justify-between gap-3 border-b border-[color:var(--surface-sunk)] px-5 py-4">
+              <div className="min-w-0">
+                <div className="text-[15px] font-semibold">Taxes already paid</div>
+                <div className="tnum mt-1 text-[13.5px] text-ink-faint">
+                  {inr(current.tdsCredit)} TDS
+                  {current.selfAssessmentTax > 0
+                    ? ` · ${inr(current.selfAssessmentTax)} self-assessment`
+                    : ""}
+                </div>
+              </div>
+              {pending.length === 0 ? (
+                <span className="shrink-0 text-[13px] font-semibold text-[color:var(--ok)]">
+                  ✓ Reconciled
+                </span>
+              ) : (
+                <Link
+                  href="/reconciliation"
+                  className="shrink-0 text-[13px] font-semibold text-[color:var(--alert)]"
+                >
+                  {pending.length} open
+                </Link>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 px-5 py-4">
+              <div className="min-w-0">
+                <div className="text-[15px] font-semibold">Refund account</div>
+                <div className="mt-1 truncate text-[13.5px] text-ink-faint">
+                  {refundAccount
+                    ? `${refundAccount.bank} ···· ${refundAccount.accountNumberMasked.slice(-4)} · ${refundAccount.validated ? "pre-validated" : "not validated"} · IFSC ${refundAccount.ifsc}`
+                    : "None nominated"}
+                </div>
+              </div>
+              <Link
                 href="/profile"
-                rows={[
-                  ["Name", state.profile.name],
-                  ["PAN", `${state.profile.pan} (synthetic)`],
-                  ["Aadhaar", state.profile.aadhaarMasked],
-                  ["Residential status", state.profile.residentialStatus],
-                  [
-                    "Refund account",
-                    state.profile.bankAccounts.find((b) => b.nominatedForRefund)
-                      ? `${state.profile.bankAccounts.find((b) => b.nominatedForRefund)!.bank} ${state.profile.bankAccounts.find((b) => b.nominatedForRefund)!.accountNumberMasked}`
-                      : "None nominated",
-                  ],
-                ]}
-              />
+                className="shrink-0 text-[13.5px] font-medium text-[color:var(--plum)]"
+              >
+                Change
+              </Link>
+            </div>
+          </Card>
+        </div>
 
-              <div>
-                <SectionLabel title="Income" href="/income" />
-                <Row label="Gross salary" value={current.grossSalary} note={form16.employer.name} />
-                <Row label="Exempt allowances" value={current.exemptAllowances} negative indent />
-                <Row label="Standard deduction" value={current.standardDeduction} negative indent />
-                <Row label="Professional tax" value={current.professionalTax} negative indent />
-                <Row label="Income from salary" value={current.incomeFromSalary} />
-                <Row
-                  label="Income from house property"
-                  value={current.incomeFromHouseProperty}
-                  tone={current.incomeFromHouseProperty < 0 ? "alert" : undefined}
-                />
-                <Row
-                  label="Income from other sources"
-                  value={current.incomeFromOtherSources}
-                />
-                <Row label="Gross total income" value={current.grossTotalIncome} strong />
+        {/* --------------------------- right column --------------------------- */}
+        <div className="space-y-3.5 lg:sticky lg:top-[124px] lg:self-start">
+          <Card
+            tone={current.refundDue > 0 ? "money" : "plum"}
+            className="p-6 sm:px-6 sm:py-[26px]"
+          >
+            <div className="text-[13px] text-white/80">
+              {current.refundDue > 0 ? "Refund due to you" : "Tax still payable"}
+            </div>
+            <div className="tnum mt-1 font-display text-[52px] leading-none text-white sm:text-[64px]">
+              {inr(current.refundDue > 0 ? current.refundDue : current.taxPayable)}
+            </div>
+            <div className="mt-4 space-y-2.5 border-t border-white/[0.22] pt-4 text-[13.5px]">
+              <div className="flex justify-between gap-3">
+                <span className="text-white/[0.82]">Tax on total income</span>
+                <span className="tnum text-white">
+                  {inr(current.totalTaxLiability)}
+                </span>
               </div>
-
-              <div>
-                <SectionLabel title="Deductions" href="/deductions" />
-                {current.chapterVIABreakdown.length === 0 ? (
-                  <p className="py-1.5 text-[13px] text-ink-faint">
-                    None claimable under the {state.regime} regime.
-                  </p>
-                ) : (
-                  current.chapterVIABreakdown.map((b) => (
-                    <Row key={b.label} label={b.label} value={b.amount} negative indent />
-                  ))
-                )}
-                <Row label="Total income" value={current.totalIncome} strong />
+              <div className="flex justify-between gap-3">
+                <span className="text-white/[0.82]">Already paid</span>
+                <span className="tnum text-white">
+                  {inr(current.tdsCredit + current.selfAssessmentTax)}
+                </span>
               </div>
-
-              <div>
-                <SectionLabel title="Tax computation" href="/regime" />
-                <Row label="Tax on total income" value={Math.round(current.taxBeforeRebate)} />
-                {current.rebate87A > 0 ? (
-                  <Row label="Rebate u/s 87A" value={Math.round(current.rebate87A)} negative indent />
-                ) : null}
-                {current.surcharge > 0 ? (
-                  <Row label="Surcharge" value={Math.round(current.surcharge)} indent />
-                ) : null}
-                <Row label="Cess at 4%" value={Math.round(current.cess)} indent />
-                <Row label="Total tax liability" value={current.totalTaxLiability} strong />
-                <Row label="Tax deducted at source" value={current.tdsCredit} negative />
-                {current.selfAssessmentTax > 0 ? (
-                  <Row label="Self-assessment tax paid" value={current.selfAssessmentTax} negative />
-                ) : null}
-                <Row
-                  label={current.refundDue > 0 ? "Refund claimed" : "Balance payable"}
-                  value={current.refundDue || current.taxPayable}
-                  strong
-                  tone={current.refundDue > 0 ? "ok" : "alert"}
-                />
-              </div>
+              {comparison.saving > 0 &&
+              state.regime === comparison.recommended ? (
+                <div className="flex justify-between gap-3">
+                  <span className="text-white/[0.82]">
+                    Saved by the {state.regime} regime
+                  </span>
+                  <span className="tnum text-white">{inr(comparison.saving)}</span>
+                </div>
+              ) : null}
             </div>
           </Card>
 
-          {/* -------- declaration -------- */}
-          <Card>
-            <CardHeader title="Declaration" eyebrow="Step 4" />
-            <div className="space-y-4 px-4 py-4">
-              <Toggle
-                checked={declaration}
-                onChange={setDeclaration}
-                label="I confirm the information above is true and complete"
-                description="In a real return this is a statement under section 140, made in your capacity as the taxpayer, and a false one carries consequences under section 277. Here it confirms you have read the summary."
-              />
+          <Card className="p-5 sm:px-[22px] sm:py-5">
+            <div className="text-[15px] font-semibold">What submitting does</div>
+            <p className="mt-2 text-[14px] leading-relaxed text-ink-soft">
+              It files your {form} with the department and locks this draft. You
+              can still revise it later under{" "}
+              <Term name="Section 139(5)">section 139(5)</Term>, and you will
+              still need to e-verify within 30 days for the filing to count.
+            </p>
 
-              <Callout tone="warn" title="Simulated submission">
-                Nothing is transmitted anywhere. This generates a synthetic
-                acknowledgement number and moves your local demo state forward.
-              </Callout>
+            <button
+              onClick={() => setDeclaration(!declaration)}
+              aria-pressed={declaration}
+              className="mt-4 flex w-full items-start gap-3 rounded-[var(--radius-sm)] bg-plum-50 px-3.5 py-3.5 text-left"
+            >
+              <span
+                className={cx(
+                  "mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] border-[color:var(--plum)] text-[11px] text-white",
+                  declaration && "bg-[color:var(--plum)]",
+                )}
+              >
+                {declaration ? "✓" : null}
+              </span>
+              <span className="text-[13.5px] leading-relaxed text-ink-strong">
+                I confirm the information above is correct and complete to the
+                best of my knowledge.
+              </span>
+            </button>
 
+            <div className="mt-4">
               <Button
                 block
                 size="lg"
                 disabled={!declaration || hardBlocked}
-                onClick={submit}
+                onClick={openConfirmation}
               >
-                {hardBlocked
-                  ? "Pay the outstanding tax first"
-                  : `Submit ${state.filing.formSelected ?? recommendation.form}`}
+                {hardBlocked ? "Pay the outstanding tax first" : "Submit my return"}
               </Button>
-              {hardBlocked ? (
-                <Link
-                  href="/filing/payment"
-                  className="block text-center text-[13px] font-medium text-[color:var(--pine)] underline underline-offset-2"
-                >
-                  Go to payment
-                </Link>
-              ) : null}
             </div>
+            {hardBlocked ? (
+              <Link
+                href="/filing/payment"
+                className="mt-3 block text-center text-[13px] font-medium text-[color:var(--plum)] underline underline-offset-2"
+              >
+                Go to payment
+              </Link>
+            ) : (
+              <p className="mt-3 text-center text-[12px] text-ink-faint">
+                One more tap on the review card after this. Nothing is
+                transmitted to any tax authority.
+              </p>
+            )}
           </Card>
-        </div>
 
-        {/* -------- sidebar -------- */}
-        <div className="lg:sticky lg:top-20 lg:self-start">
-          <Card tone="sunk">
-            <CardHeader title="Where you are" />
-            <div className="px-4 py-4">
-              <ProgressTrack
-                current={state.filing.submitted ? 3 : hardBlocked ? 1 : 2}
-                steps={[
-                  { id: "prepare", label: "Prepare" },
-                  { id: "pay", label: "Pay anything due" },
-                  { id: "submit", label: "Submit" },
-                  { id: "verify", label: "e-Verify" },
-                ]}
-              />
-            </div>
-          </Card>
+          {copilotEdits > 0 ? (
+            <Card tone="copilot" className="flex gap-3 p-4">
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--petrol)"
+                strokeWidth="1.7"
+                strokeLinejoin="round"
+                className="mt-0.5 shrink-0"
+              >
+                <path d="M12 3.5l2.1 4.9 5.4.5-4.1 3.5 1.2 5.2L12 14.9l-4.6 2.7 1.2-5.2-4.1-3.5 5.4-.5z" />
+              </svg>
+              <p className="text-[13.5px] leading-relaxed text-[color:var(--petrol-text)]">
+                The copilot made {copilotEdits}{" "}
+                {copilotEdits === 1 ? "change" : "changes"} to this return. Every
+                one is listed in the activity timeline, and every one can still
+                be undone.
+              </p>
+            </Card>
+          ) : null}
+
+          {blockers.length === 0 ? (
+            <Callout tone="ok" title="Nothing is blocking you">
+              Your AIS is reconciled, you are on the cheaper regime, and there is
+              no tax outstanding.
+            </Callout>
+          ) : null}
         </div>
+      </div>
+
+      <div className="lg:hidden">
+        <FlowActionBar
+          note="You will still need to e-verify within 30 days."
+        >
+          <Button
+            block
+            size="lg"
+            disabled={!declaration || hardBlocked}
+            onClick={openConfirmation}
+          >
+            {hardBlocked ? "Pay the outstanding tax first" : "Submit my return"}
+          </Button>
+        </FlowActionBar>
       </div>
     </div>
   );
@@ -392,43 +505,54 @@ export default function FilingPage() {
 
 /* ---------------------------------------------------------------- */
 
-function SectionLabel({ title, href }: { title: string; href: string }) {
+function ReviewSection({
+  title,
+  href,
+  children,
+}: {
+  title: React.ReactNode;
+  href: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="mb-1 flex items-center justify-between border-b border-line pb-1">
-      <span className="eyebrow">{title}</span>
-      <Link
-        href={href}
-        className="text-[12px] font-medium text-[color:var(--pine)]"
-      >
-        Edit
-      </Link>
+    <div className="border-b border-[color:var(--surface-sunk)] px-5 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[15px] font-semibold">{title}</div>
+        <Link
+          href={href}
+          className="shrink-0 text-[13.5px] font-medium text-[color:var(--plum)]"
+        >
+          Edit
+        </Link>
+      </div>
+      <div className="mt-3 space-y-2">{children}</div>
     </div>
   );
 }
 
-function ReviewBlock({
-  title,
-  href,
-  rows,
+function MiniLine({
+  label,
+  value,
+  strong,
 }: {
-  title: string;
-  href: string;
-  rows: [string, string][];
+  label: string;
+  value: string;
+  strong?: boolean;
 }) {
   return (
-    <div>
-      <SectionLabel title={title} href={href} />
-      <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-3 sm:block">
-            <dt className="text-[12px] text-ink-faint">{k}</dt>
-            <dd className="text-[13px] text-ink">{v}</dd>
-          </div>
-        ))}
-      </dl>
+    <div
+      className={cx(
+        "flex items-baseline justify-between gap-3 text-[14px]",
+        strong && "border-t border-[color:var(--surface-sunk)] pt-2 font-semibold",
+      )}
+    >
+      <span className={strong ? "" : "text-ink-soft"}>{label}</span>
+      <span className="tnum">{value}</span>
     </div>
   );
 }
+
+/* ---------------------------------------------------------------- */
 
 function AlreadySubmitted() {
   const state = useAppStore();
@@ -485,14 +609,14 @@ function AlreadySubmitted() {
         {!state.filing.everified ? (
           <Link
             href="/filing/everify"
-            className="rounded-[var(--radius-sm)] bg-[color:var(--pine)] px-5 py-3 text-[14px] font-medium text-white"
+            className="rounded-[var(--radius-sm)] bg-[color:var(--plum)] px-5 py-3 text-[14px] font-medium text-white"
           >
             e-Verify now
           </Link>
         ) : (
           <Link
             href="/refund"
-            className="rounded-[var(--radius-sm)] bg-[color:var(--pine)] px-5 py-3 text-[14px] font-medium text-white"
+            className="rounded-[var(--radius-sm)] bg-[color:var(--plum)] px-5 py-3 text-[14px] font-medium text-white"
           >
             Track the refund
           </Link>
