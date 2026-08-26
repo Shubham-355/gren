@@ -168,6 +168,8 @@ export function CopilotPanel() {
         context: afterContext,
         contextSummary: summariseContext(afterContext),
         pendingCalls: calls,
+        // Replayed verbatim so newer models get their thought signatures back.
+        modelParts: first.modelParts,
         functionResponses: outcomes.map((o) => ({
           name: o.name,
           response: o.result,
@@ -484,6 +486,8 @@ function ActionRow({
 type ChatResponse = {
   text?: string;
   toolCalls?: ToolCall[];
+  /** the model's own turn, handed straight back on the second phase */
+  modelParts?: Record<string, unknown>[];
   configured?: boolean;
   error?: string;
   detail?: string;

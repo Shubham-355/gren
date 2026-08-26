@@ -44,6 +44,13 @@ type RequestBody = {
   /** present on phase 2 only */
   pendingCalls?: { name: string; args: Record<string, unknown> }[];
   functionResponses?: FunctionResponsePayload[];
+  /**
+   * The model's own turn from phase 1, verbatim. Newer models attach a
+   * thoughtSignature to each function call and reject the follow-up turn if it
+   * is missing, so the parts are replayed exactly as they came back rather
+   * than rebuilt from the call names and arguments.
+   */
+  modelParts?: Record<string, unknown>[];
 };
 
 const SYSTEM_PROMPT = `You are TaxSaathi, the copilot built into an income tax e-filing platform for salaried taxpayers in India. You live in a side panel that is open on top of whatever screen the user is currently looking at.
@@ -82,6 +89,23 @@ WHEN YOU CANNOT HELP
 - Capital gains and business income are out of scope in this prototype. If asked, say that directly and point at what is covered.
 - You give general information about how Indian income tax works. You are not a chartered accountant, and for anything genuinely unusual you should say a professional is worth the money.`;
 
+/**
+ * A zero thinking budget makes the older Flash models markedly faster, and this
+ * copilot is answering from a context that is already handed to it rather than
+ * reasoning its way to the numbers.
+ *
+ * The newer models are thinking models, though: they reject `thinkingBudget: 0`
+ * with a bare "Request contains an invalid argument" 400, which is impossible
+ * to diagnose from the panel. So the field is simply left off for them.
+ */
+function generationConfigFor(model: string) {
+  const base = { temperature: 0.4, maxOutputTokens: 900 };
+  const rejectsZeroThinking = /^gemini-(?:[3-9]|\d{2,})/.test(model);
+  return rejectsZeroThinking
+    ? base
+    : { ...base, thinkingConfig: { thinkingBudget: 0 } };
+}
+
 function toGeminiContents(body: RequestBody) {
   const contents: Record<string, unknown>[] = [];
 
@@ -92,13 +116,16 @@ function toGeminiContents(body: RequestBody) {
     });
   }
 
-  // Phase 2: replay the model's function calls, then their results.
+  // Phase 2: replay the model's own turn, then the results of its tool calls.
   if (body.pendingCalls?.length && body.functionResponses?.length) {
     contents.push({
       role: "model",
-      parts: body.pendingCalls.map((c) => ({
-        functionCall: { name: c.name, args: c.args },
-      })),
+      parts:
+        body.modelParts?.length
+          ? body.modelParts
+          : body.pendingCalls.map((c) => ({
+              functionCall: { name: c.name, args: c.args },
+            })),
     });
     contents.push({
       role: "user",
@@ -148,11 +175,7 @@ export async function POST(request: Request) {
     contents: toGeminiContents(body),
     tools: [{ functionDeclarations }],
     toolConfig: { functionCallingConfig: { mode: "AUTO" } },
-    generationConfig: {
-      temperature: 0.4,
-      maxOutputTokens: 900,
-      thinkingConfig: { thinkingBudget: 0 },
-    },
+    generationConfig: generationConfigFor(MODEL),
     safetySettings: [],
   };
 
@@ -199,6 +222,8 @@ export async function POST(request: Request) {
   };
 
   const parts = data.candidates?.[0]?.content?.parts ?? [];
+  // Handed straight back on the next turn, signatures and all.
+  const modelParts = parts as unknown as Record<string, unknown>[];
   const text = parts
     .map((p) => p.text)
     .filter(Boolean)
@@ -222,5 +247,5 @@ export async function POST(request: Request) {
     });
   }
 
-  return NextResponse.json({ text, toolCalls, configured: true });
+  return NextResponse.json({ text, toolCalls, modelParts, configured: true });
 }
