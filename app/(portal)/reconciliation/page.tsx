@@ -418,12 +418,7 @@ function MismatchCard({ entry }: { entry: AisEntry }) {
   const isAction = entry.severity === "action";
 
   return (
-    <Card
-      className="border-l-[3px] p-5 sm:px-[22px]"
-      style={{
-        borderLeftColor: isAction ? "var(--alert)" : "var(--warn)",
-      }}
-    >
+    <Card className="p-5 sm:px-[22px]">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2.5">

@@ -6,12 +6,17 @@
  * read as two grids stacked on top of each other, with the content drifting
  * left of the header and a dead gutter on the right.
  *
- * The 2xl step is what makes room for the activity rail without squeezing the
- * reading column: at 1376px the rail takes 300, leaving ~1040 for the page,
- * which is the proportion the redesign's 1280px artboards were drawn at.
+ * It widens exactly once, at the same width the activity rail appears, so the
+ * rail never arrives by taking space from the reading column:
+ *
+ *   < 1700px   1152 container, no rail  -> ~750px of reading column
+ *   >= 1700px  1472 container, 300 rail -> ~735px of reading column
+ *
+ * Both sides of that step land on the proportions the redesign's 1280px
+ * artboards were drawn at, so nothing gets cramped on the way through.
  */
 export const SHELL_CONTAINER =
-  "mx-auto w-full max-w-6xl px-4 lg:px-6 2xl:max-w-[86rem]";
+  "mx-auto w-full max-w-6xl px-4 lg:px-6 min-[1700px]:max-w-[92rem]";
 
 /**
  * How much room the copilot takes when it is open on a wide screen. Applied to

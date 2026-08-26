@@ -77,7 +77,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
               <button
                 onClick={() => setTimelineOpen(true)}
-                className="hidden items-center gap-1.5 text-[13.5px] font-medium text-ink-soft hover:text-ink sm:flex 2xl:hidden"
+                className={cx(
+                  "hidden items-center gap-1.5 text-[13.5px] font-medium text-ink-soft hover:text-ink sm:flex",
+                  copilotOpen ? "min-[2100px]:hidden" : "min-[1700px]:hidden",
+                )}
               >
                 Activity
                 {changeCount > 0 ? (
@@ -120,7 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <ShellSkeleton />
             )}
           </main>
-          <TimelineRail />
+          <TimelineRail squeezed={copilotOpen} />
         </div>
 
         <Disclaimer />
@@ -134,7 +137,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             "lg:bottom-11 lg:right-0 lg:rounded-r-none lg:rounded-l-[var(--radius-sm)] lg:shadow-[-8px_8px_24px_-12px_rgba(15,95,114,0.6)]",
             // At 2xl the timeline rail carries its own "Open copilot" footer,
             // so a floating button on the same edge would just collide with it.
-            "2xl:hidden",
+            // Above this the rail carries its own "Open copilot" footer, so a
+            // floating button on the same edge would only collide with it.
+            "min-[1700px]:hidden",
             copilotOpen && "pointer-events-none opacity-0",
           )}
         >

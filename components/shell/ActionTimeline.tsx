@@ -159,13 +159,30 @@ export function TimelineList({
   );
 }
 
-/** The always-visible desktop rail. */
-export function TimelineRail() {
+/**
+ * The always-visible desktop rail.
+ *
+ * It only appears once there is room for it beside a comfortable reading
+ * column — and with the copilot open that takes a much wider screen, so the
+ * threshold moves rather than the page getting squeezed into three narrow
+ * columns. Below it, the same timeline is one tap away in the header and the
+ * bottom bar.
+ */
+export function TimelineRail({ squeezed }: { squeezed?: boolean }) {
   const count = useAppStore((s) => s.actionLog.filter((a) => !a.undone).length);
   const setCopilotOpen = useAppStore((s) => s.setCopilotOpen);
 
   return (
-    <aside className="hidden w-[300px] shrink-0 2xl:flex 2xl:flex-col">
+    <aside
+      className={cx(
+        "hidden w-[300px] shrink-0",
+        // The copilot has already taken 416px, so the rail waits for a
+        // screen wide enough to carry both without squeezing the page.
+        squeezed
+          ? "min-[2100px]:flex min-[2100px]:flex-col"
+          : "min-[1700px]:flex min-[1700px]:flex-col",
+      )}
+    >
       <div className="sticky top-[124px] flex max-h-[calc(100dvh-9rem)] flex-col overflow-hidden rounded-[var(--radius)] border border-line bg-surface">
         <div className="flex items-center gap-2 border-b border-line px-4 py-3">
           <span className="text-[14.5px] font-semibold">Activity</span>
@@ -214,7 +231,7 @@ export function TimelineSheet() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 2xl:hidden" role="dialog" aria-label="Activity">
+    <div className="fixed inset-0 z-50" role="dialog" aria-label="Activity">
       <div
         className="absolute inset-0 bg-[color:var(--ink)]/30"
         onClick={() => setOpen(false)}
