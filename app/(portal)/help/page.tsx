@@ -60,7 +60,7 @@ export default function HelpPage() {
           placeholder="Search — try 87A, AIS, marginal relief, ITR-V"
           type="search"
         />
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2 lg:gap-1.5">
           <FilterChip
             active={category === "all"}
             onClick={() => setCategory("all")}
@@ -217,7 +217,7 @@ function FilterChip({
     <button
       onClick={onClick}
       className={cx(
-        "rounded-[var(--radius-pill)] border px-3 py-1 text-[12.5px] font-medium transition-colors",
+        "rounded-[var(--radius-pill)] border px-3.5 py-2.5 text-[12.5px] font-medium transition-colors lg:px-3 lg:py-1",
         active
           ? "border-[color:var(--plum)] bg-[color:var(--plum)] text-white"
           : "border-line-strong bg-surface text-ink-soft hover:bg-sunk",

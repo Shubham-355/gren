@@ -191,7 +191,7 @@ export default function SalaryPage() {
                       </span>
                       <button
                         onClick={() => state.setHra({ metroCity: !state.hra.metroCity })}
-                        className="text-[13px] font-medium text-[color:var(--plum)] underline underline-offset-2"
+                        className="tap text-[13px] font-medium text-[color:var(--plum)] underline underline-offset-2"
                       >
                         {state.hra.metroCity
                           ? "Treating this as a metro — change"
@@ -229,7 +229,7 @@ export default function SalaryPage() {
                 </div>
                 <Link
                   href="/income/other-sources"
-                  className="mt-3 inline-block border-b border-[color:var(--plum)] text-[13.5px] font-medium text-[color:var(--plum)]"
+                  className="tap mt-3 inline-block border-b border-[color:var(--plum)] text-[13.5px] font-medium text-[color:var(--plum)]"
                 >
                   Edit other sources
                 </Link>

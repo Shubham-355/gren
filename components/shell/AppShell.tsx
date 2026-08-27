@@ -117,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
               <Link
                 href="/profile"
-                className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-plum-50 text-[12.5px] font-semibold text-[color:var(--plum)]"
+                className="tap flex h-[34px] w-[34px] items-center justify-center rounded-full bg-plum-50 text-[12.5px] font-semibold text-[color:var(--plum)]"
                 aria-label="Profile"
                 title={name}
               >

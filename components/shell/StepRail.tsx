@@ -116,7 +116,7 @@ export function PhoneStepHeader({
           <Link
             href={back.href}
             aria-label={back.label ?? "Back"}
-            className="-ml-1 shrink-0 p-1 text-ink"
+            className="tap -ml-1 shrink-0 p-1 text-ink"
           >
             <svg
               width="22"

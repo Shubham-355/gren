@@ -42,10 +42,16 @@ export function MoneyField({
       : "0";
 
   const box = {
-    sm: "w-[8rem] py-1.5 text-[14px]",
-    md: "w-[9.5rem] py-1.5 text-[15px]",
-    lg: "w-[9.5rem] py-2 text-[17px]",
+    sm: "w-[8rem] text-[14px]",
+    md: "w-[9.5rem] text-[15px]",
+    lg: "w-[9.5rem] text-[17px]",
   }[size];
+
+  // The vertical padding belongs to the input, not to the box around it.
+  // With it on the box, the field looked 36px tall but only the middle 24px
+  // of it actually took a tap — the rest was inert border. On a phone it
+  // opens out to the 44px a thumb expects.
+  const pad = size === "lg" ? "py-2.5 lg:py-2" : "py-2.5 lg:py-1.5";
 
   return (
     <span
@@ -78,7 +84,8 @@ export function MoneyField({
           onValueChange(next);
         }}
         className={cx(
-          "tnum w-full min-w-0 border-0 bg-transparent p-0 text-right font-medium text-ink focus:outline-none",
+          "tnum w-full min-w-0 border-0 bg-transparent px-0 text-right font-medium text-ink focus:outline-none",
+          pad,
           size === "lg" && "font-semibold",
         )}
       />

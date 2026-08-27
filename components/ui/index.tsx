@@ -126,7 +126,9 @@ const buttonVariants = {
 } as const;
 
 const buttonSizes = {
-  sm: "text-[13px] h-[34px] px-3.5",
+  // 34px is the size this button is drawn at; `tap` is what a thumb actually
+  // gets to hit. See the touch-target rule in globals.css.
+  sm: "tap text-[13px] h-[34px] px-3.5",
   md: "text-[14.5px] h-[44px] px-5",
   lg: "text-[16px] h-[52px] px-6",
 } as const;
@@ -509,7 +511,12 @@ export function ChoiceGroup<T extends string>({
           aria-pressed={value === o.value}
           className={cx(
             "rounded-[var(--radius-pill)] font-medium transition-colors",
-            size === "sm" ? "px-3 py-1 text-[12.5px]" : "px-4 py-1.5 text-[13.5px]",
+            // Padded out for a thumb below lg. Segments touch each other, so
+            // this one cannot use the `tap` overlay — it would sit over its
+            // neighbour and swallow the tap meant for it.
+            size === "sm"
+              ? "px-3 py-2 text-[12.5px] lg:py-1"
+              : "px-4 py-2.5 text-[13.5px] lg:py-1.5",
             value === o.value
               ? "bg-surface text-ink shadow-[var(--shadow-sm)]"
               : "text-ink-faint hover:text-ink-soft",

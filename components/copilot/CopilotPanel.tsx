@@ -330,7 +330,7 @@ export function CopilotPanel() {
           <button
             onClick={() => setOpen(false)}
             aria-label="Close copilot"
-            className="rounded-full p-1 text-ink-soft hover:text-ink"
+            className="tap rounded-full p-1 text-ink-soft hover:text-ink"
           >
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
               <path

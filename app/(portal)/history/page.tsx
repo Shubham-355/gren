@@ -156,7 +156,7 @@ export default function HistoryPage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Link
                     href="/filing/confirmation"
-                    className="rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-1.5 text-[12.5px] font-medium"
+                    className="rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-2.5 text-[12.5px] font-medium lg:py-1.5"
                   >
                     Acknowledgement
                   </Link>
@@ -170,7 +170,7 @@ export default function HistoryPage() {
                   ) : (
                     <Link
                       href="/refund"
-                      className="rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-1.5 text-[12.5px] font-medium"
+                      className="rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-2.5 text-[12.5px] font-medium lg:py-1.5"
                     >
                       Refund status
                     </Link>
@@ -180,7 +180,7 @@ export default function HistoryPage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Link
                     href="/notices"
-                    className="rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-1.5 text-[12.5px] font-medium"
+                    className="rounded-[var(--radius-sm)] border border-line-strong bg-surface px-3 py-2.5 text-[12.5px] font-medium lg:py-1.5"
                   >
                     Notices for this year
                   </Link>

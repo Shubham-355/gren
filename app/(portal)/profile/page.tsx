@@ -236,38 +236,48 @@ export default function ProfilePage() {
         />
         <ul className="divide-y divide-[color:var(--line)]">
           {state.profile.bankAccounts.map((account) => (
-            <li key={account.id} className="flex items-start gap-3 px-4 py-3">
+            // The whole row nominates the account, not just the 16px dot
+            // beside it. Choosing where a refund lands should not be a
+            // pinpoint tap on a phone.
+            <li key={account.id}>
               <button
                 onClick={() => state.setRefundAccount(account.id)}
                 disabled={!account.validated}
-                aria-label={`Nominate ${account.bank}`}
-                className={cx(
-                  "mt-1 h-4 w-4 shrink-0 rounded-full border-2 disabled:opacity-35",
-                  account.nominatedForRefund
-                    ? "border-[color:var(--plum)] bg-[color:var(--plum)] ring-2 ring-inset ring-white"
-                    : "border-line-strong",
-                )}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[14px] font-medium">{account.bank}</span>
-                  <Badge tone={account.validated ? "ok" : "warn"}>
-                    {account.validated ? "Validated" : "Not validated"}
-                  </Badge>
-                  {account.nominatedForRefund ? (
-                    <Badge tone="plum">For refund</Badge>
+                aria-pressed={account.nominatedForRefund}
+                aria-label={`Nominate ${account.bank} for the refund`}
+                className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors disabled:cursor-default enabled:hover:bg-sunk"
+              >
+                <span
+                  aria-hidden
+                  className={cx(
+                    "mt-1 h-4 w-4 shrink-0 rounded-full border-2",
+                    !account.validated && "opacity-35",
+                    account.nominatedForRefund
+                      ? "border-[color:var(--plum)] bg-[color:var(--plum)] ring-2 ring-inset ring-white"
+                      : "border-line-strong",
+                  )}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-[14px] font-medium">{account.bank}</span>
+                    <Badge tone={account.validated ? "ok" : "warn"}>
+                      {account.validated ? "Validated" : "Not validated"}
+                    </Badge>
+                    {account.nominatedForRefund ? (
+                      <Badge tone="plum">For refund</Badge>
+                    ) : null}
+                  </span>
+                  <span className="mono mt-0.5 block text-[12px] text-ink-faint">
+                    {account.accountNumberMasked} · {account.ifsc} · {account.type}
+                  </span>
+                  {!account.validated ? (
+                    <span className="mt-1 block text-[12px] leading-snug text-[color:var(--warn)]">
+                      Validation checks the account name against your PAN. Until
+                      it passes, this account cannot receive a refund.
+                    </span>
                   ) : null}
-                </div>
-                <div className="mono mt-0.5 text-[12px] text-ink-faint">
-                  {account.accountNumberMasked} · {account.ifsc} · {account.type}
-                </div>
-                {!account.validated ? (
-                  <p className="mt-1 text-[12px] leading-snug text-[color:var(--warn)]">
-                    Validation checks the account name against your PAN. Until it
-                    passes, this account cannot receive a refund.
-                  </p>
-                ) : null}
-              </div>
+                </span>
+              </button>
             </li>
           ))}
         </ul>

@@ -313,7 +313,7 @@ export default function ReconciliationPage() {
                               "pending" as MismatchResolution,
                             )
                           }
-                          className="text-[11.5px] text-ink-faint underline underline-offset-2 hover:text-ink"
+                          className="tap text-[11.5px] text-ink-faint underline underline-offset-2 hover:text-ink"
                         >
                           Undo
                         </button>
@@ -381,7 +381,7 @@ export default function ReconciliationPage() {
           </Card>
 
           <details className="group rounded-[var(--radius)] border border-alert-100 bg-alert-50 p-5">
-            <summary className="cursor-pointer list-none text-[14px] font-semibold text-[color:var(--alert)]">
+            <summary className="tap cursor-pointer list-none text-[14px] font-semibold text-[color:var(--alert)]">
               Why not just skip it
               <span className="ml-1.5 font-normal text-ink-faint group-open:hidden">
                 — read

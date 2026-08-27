@@ -40,7 +40,7 @@ export function Expandable({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         className={cx(
-          "whitespace-nowrap border-b border-[color:var(--plum-line)] font-medium text-[color:var(--plum)]",
+          "tap whitespace-nowrap border-b border-[color:var(--plum-line)] font-medium text-[color:var(--plum)]",
           "hover:border-[color:var(--plum)]",
         )}
       >

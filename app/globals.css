@@ -234,3 +234,26 @@ h1, h2, h3, h4, .display {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ---- touch targets ----
+   A 13px "Edit" link is a 24x22 box. That is fine for a cursor and a miss
+   waiting to happen for a thumb, but padding it out would shove the label
+   off the margin the card was drawn to. So the box stays exactly where the
+   design put it and the *hit area* grows underneath it, centred, up to the
+   44px a thumb expects. Coarse pointers and phone widths only — on a mouse
+   there is nothing to fix and the invisible overlay would only get in the
+   way of hovering something else. */
+@media (pointer: coarse), (max-width: 1023px) {
+  .tap {
+    position: relative;
+  }
+  .tap::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}

@@ -28,7 +28,7 @@ export function Disclaimer({ inset = false }: { inset?: boolean }) {
         rules. Nothing on this site is tax advice.{" "}
         <Link
           href="/help#about"
-          className="text-[color:var(--plum)] underline underline-offset-2"
+          className="tap inline-block text-[color:var(--plum)] underline underline-offset-2"
         >
           What&rsquo;s real, what&rsquo;s mocked
         </Link>

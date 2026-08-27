@@ -254,7 +254,7 @@ export default function RegimePage() {
             setShowWorking(showWorking ? null : (state.regime as Regime))
           }
           aria-expanded={Boolean(showWorking)}
-          className="border-b border-[color:var(--plum)] text-[13.5px] font-medium text-[color:var(--plum)]"
+          className="tap border-b border-[color:var(--plum)] text-[13.5px] font-medium text-[color:var(--plum)]"
         >
           {showWorking
             ? "Hide the slab-by-slab working"

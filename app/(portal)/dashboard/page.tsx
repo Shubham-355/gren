@@ -189,7 +189,10 @@ export default function DashboardPage() {
         <div className="space-y-3.5">
           <Card className="px-5 py-4">
             <div className="eyebrow">Still to do</div>
-            <ul className="mt-3.5 space-y-3.5">
+            {/* Rows, not lines of text. Each of these is a link into a step,
+                and at the line height alone they were 22px of target with 14px
+                of dead air between them. */}
+            <ul className="mt-2.5 space-y-0.5">
               {FLOW_STEPS.filter((s) => s.id !== "submit").map((step) => {
                 const done = stepDone(step.id, state);
                 const isNext = step.id === next.id;
@@ -197,7 +200,10 @@ export default function DashboardPage() {
                   step.id === "reconcile" && !done ? pending.length : 0;
                 return (
                   <li key={step.id}>
-                    <Link href={step.href} className="flex items-center gap-3">
+                    <Link
+                      href={step.href}
+                      className="-mx-2 flex items-center gap-3 rounded-[10px] px-2 py-2 transition-colors hover:bg-sunk"
+                    >
                       <span
                         className={cx(
                           "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
@@ -236,7 +242,7 @@ export default function DashboardPage() {
               </p>
               <Link
                 href={`/notices/${openNotice.id}`}
-                className="mt-2.5 inline-block border-b border-[color:var(--plum)] text-[13.5px] font-semibold text-[color:var(--plum)]"
+                className="tap mt-2.5 inline-block border-b border-[color:var(--plum)] text-[13.5px] font-semibold text-[color:var(--plum)]"
               >
                 Read the notice
               </Link>
@@ -262,7 +268,7 @@ export default function DashboardPage() {
           </Card>
 
           <details className="rounded-[var(--radius)] border border-line bg-surface px-5 py-4">
-            <summary className="cursor-pointer list-none text-[13.5px] font-medium text-ink-soft">
+            <summary className="tap cursor-pointer list-none text-[13.5px] font-medium text-ink-soft">
               Reset this demo
             </summary>
             <p className="mt-2 text-[12.5px] leading-relaxed text-ink-faint">

@@ -176,7 +176,7 @@ export default function FilingPage() {
                   <DemoTag label="synthetic" /> · AY {ASSESSMENT_YEAR} ·{" "}
                   <button
                     onClick={() => setShowForm(!showForm)}
-                    className="font-medium text-[color:var(--plum)] underline underline-offset-2"
+                    className="tap font-medium text-[color:var(--plum)] underline underline-offset-2"
                   >
                     {form}
                   </button>
@@ -184,7 +184,7 @@ export default function FilingPage() {
               </div>
               <Link
                 href="/profile"
-                className="shrink-0 text-[13.5px] font-medium text-[color:var(--plum)]"
+                className="tap shrink-0 text-[13.5px] font-medium text-[color:var(--plum)]"
               >
                 Edit
               </Link>
@@ -337,7 +337,7 @@ export default function FilingPage() {
               ) : (
                 <Link
                   href="/reconciliation"
-                  className="shrink-0 text-[13px] font-semibold text-[color:var(--alert)]"
+                  className="tap shrink-0 text-[13px] font-semibold text-[color:var(--alert)]"
                 >
                   {pending.length} open
                 </Link>
@@ -355,7 +355,7 @@ export default function FilingPage() {
               </div>
               <Link
                 href="/profile"
-                className="shrink-0 text-[13.5px] font-medium text-[color:var(--plum)]"
+                className="tap shrink-0 text-[13.5px] font-medium text-[color:var(--plum)]"
               >
                 Change
               </Link>
