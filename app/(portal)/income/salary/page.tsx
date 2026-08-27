@@ -15,7 +15,7 @@ import {
   Toggle,
   cx,
 } from "@/components/ui";
-import { InlineMoneyRow } from "@/components/ui/InlineMoney";
+import { InlineMoneyRow, MoneyField } from "@/components/ui/InlineMoney";
 import { form16, rentDetails } from "@/lib/data/seed";
 import { inr, shortDate } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
@@ -178,25 +178,17 @@ export default function SalaryPage() {
                     </div>
 
                     <div className="mt-3.5 flex flex-wrap items-center gap-4">
-                      <label className="flex items-center gap-2 text-[13.5px] text-ink-soft">
+                      <span className="flex items-center gap-2.5 text-[13.5px] text-ink-soft">
                         <span>Rent for the year</span>
-                        <span className="flex items-center gap-0.5">
-                          <span className="text-[14px] text-ink-faint">₹</span>
-                          <input
-                            inputMode="numeric"
-                            aria-label="Rent paid for the year"
-                            value={state.hra.rentPaidAnnual.toLocaleString("en-IN")}
-                            onChange={(e) =>
-                              state.setHra({
-                                rentPaidAnnual: Number(
-                                  e.target.value.replace(/[^0-9]/g, "") || 0,
-                                ),
-                              })
-                            }
-                            className="tnum w-[7rem] rounded-[8px] border border-line-strong bg-surface px-2 py-1 text-right text-[14px] focus:border-[color:var(--plum)] focus:outline-none"
-                          />
-                        </span>
-                      </label>
+                        <MoneyField
+                          value={state.hra.rentPaidAnnual}
+                          onValueChange={(v) =>
+                            state.setHra({ rentPaidAnnual: v })
+                          }
+                          label="Rent paid for the year"
+                          size="sm"
+                        />
+                      </span>
                       <button
                         onClick={() => state.setHra({ metroCity: !state.hra.metroCity })}
                         className="text-[13px] font-medium text-[color:var(--plum)] underline underline-offset-2"
