@@ -127,7 +127,7 @@ export default function NoticesPage() {
         })}
       </div>
 
-      <Callout tone="info" title="Most notices are not what people fear">
+      <Callout tone="info" title="Most notices are not what people fear" collapsible>
         The overwhelming majority are automated: an{" "}
         <Term name="Intimation u/s 143(1)">intimation under 143(1)</Term> confirming
         the arithmetic, or an e-Campaign nudge saying a figure the department holds

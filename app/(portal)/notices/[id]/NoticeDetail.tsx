@@ -114,11 +114,6 @@ export function NoticeDetail({ notice }: { notice: Notice }) {
             <p className="whitespace-pre-line rounded-[var(--radius-sm)] border border-line bg-sunk p-3.5 text-[13px] leading-relaxed text-ink-soft">
               {notice.detail}
             </p>
-            <p className="mt-2 text-[11.5px] text-ink-faint">
-              Synthetic text written for this prototype in the register a real
-              notice uses. It is not a copy of any actual departmental
-              communication.
-            </p>
           </div>
         ) : null}
       </Card>
@@ -224,7 +219,7 @@ export function NoticeDetail({ notice }: { notice: Notice }) {
       ) : null}
 
       {!notice.requiresResponse ? (
-        <Callout tone="ok" title="Nothing is required from you">
+        <Callout tone="ok" title="Nothing is required from you" collapsible>
           Keep this with your records for the year. If you ever disagree with an
           intimation like this one, the route is a rectification request under
           section 154, not a grievance.

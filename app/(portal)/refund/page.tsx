@@ -88,10 +88,8 @@ export default function RefundPage() {
                 hint="on the figures currently in your return"
               />
               <p className="mt-3 max-w-prose text-[13.5px] leading-relaxed text-ink-soft">
-                Nothing is in the pipeline because the return has not been filed.
-                The clock on a refund starts at verification, not at submission —
-                which is why an unverified return is the most common cause of a
-                refund that never arrives.
+                Nothing is in the pipeline until the return is filed. The refund
+                clock starts at verification, not submission.
               </p>
               <Link
                 href="/filing"
@@ -206,7 +204,7 @@ export default function RefundPage() {
             </ol>
           </Card>
 
-          <Callout tone="info" title="What this stage means for you">
+          <Callout tone="info" title="What this stage means for you" collapsible>
             {refundStageMeaning(stage)}{" "}
             {stage === "filed"
               ? "Verify it and the queue starts."
@@ -291,7 +289,7 @@ export default function RefundPage() {
         </ul>
       </Card>
 
-      <Callout tone="warn" title="If it stops moving">
+      <Callout tone="warn" title="If it stops moving" collapsible>
         The usual causes are an unvalidated bank account, a name mismatch between
         your PAN and your bank record, or an outstanding demand from an earlier
         year being adjusted against this refund under section 245. All three are

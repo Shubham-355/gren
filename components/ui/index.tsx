@@ -690,11 +690,25 @@ export function Callout({
   title,
   children,
   icon,
+  collapsible,
 }: {
   tone?: "info" | "warn" | "alert" | "ok" | "plum";
   title?: ReactNode;
   children: ReactNode;
   icon?: ReactNode;
+  /**
+   * Folds the explanation away behind its own title.
+   *
+   * These boxes are the app's long-form answers — "when would this screen have
+   * something on it", "how long to keep all this". They are worth having and
+   * badly worth not reading four at a time at the foot of every screen. The
+   * title is already the question, so it makes a better button than a label,
+   * and the answer stays exactly as written for whoever wants it.
+   *
+   * Only for boxes whose title stands on its own. A callout that has to be
+   * read to be understood is not one to hide.
+   */
+  collapsible?: boolean;
 }) {
   const tones = {
     info: "bg-petrol-50 border-petrol-100 text-[color:var(--petrol)]",
@@ -703,13 +717,29 @@ export function Callout({
     ok: "bg-ok-50 border-ok-100 text-[color:var(--ok)]",
     plum: "bg-plum-50 border-plum-100 text-[color:var(--plum)]",
   } as const;
+  const box = cx(
+    "rounded-[var(--radius-sm)] border px-3.5 py-3 text-[13px] leading-relaxed",
+    tones[tone],
+  );
+
+  if (collapsible && title) {
+    return (
+      <details className={cx("group", box)}>
+        <summary className="tap flex cursor-pointer list-none items-center gap-1.5 font-semibold">
+          {icon}
+          {title}
+          <ChevronDown
+            className="ml-auto shrink-0 transition-transform group-open:rotate-180"
+            aria-hidden
+          />
+        </summary>
+        <div className="mt-1.5 text-ink-soft">{children}</div>
+      </details>
+    );
+  }
+
   return (
-    <div
-      className={cx(
-        "rounded-[var(--radius-sm)] border px-3.5 py-3 text-[13px] leading-relaxed",
-        tones[tone],
-      )}
-    >
+    <div className={box}>
       {title ? (
         <div className="mb-1 flex items-center gap-1.5 font-semibold">
           {icon}
@@ -718,6 +748,28 @@ export function Callout({
       ) : null}
       <div className="text-ink-soft">{children}</div>
     </div>
+  );
+}
+
+function ChevronDown({
+  className,
+  ...rest
+}: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      {...rest}
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
   );
 }
 

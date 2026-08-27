@@ -73,9 +73,8 @@ export default function SalaryPage() {
             Here is what your employer already told them
           </h1>
           <p className="mt-3.5 max-w-[44rem] text-[15px] leading-relaxed text-ink-soft [text-wrap:pretty] sm:text-[16px]">
-            Straight from your Form 16 — nothing for you to retype. Change
-            anything that looks wrong and every figure on the platform moves
-            with it.
+            Straight from your Form 16. Change anything wrong and every figure
+            moves with it.
           </p>
 
           <div className="mt-7 grid items-start gap-5 xl:grid-cols-2">
@@ -345,9 +344,8 @@ function ImportGate({ onManual }: { onManual: () => void }) {
           Start with your Form 16
         </h1>
         <p className="mt-3.5 text-[15px] leading-relaxed text-ink-soft [text-wrap:pretty] sm:text-[16px]">
-          Your employer already told the department everything on this page.
-          Rather than making you retype it, bring it in and correct anything
-          that looks wrong.
+          Your employer already told the department all of this. Bring it in
+          rather than retyping it.
         </p>
 
         <Card className="mt-7 overflow-hidden">
@@ -383,7 +381,7 @@ function ImportGate({ onManual }: { onManual: () => void }) {
         </Card>
 
         <div className="mt-5">
-          <Callout tone="info" title="What gets filled in">
+          <Callout tone="info" title="What gets filled in" collapsible>
             Basic, HRA, allowances, your employer&rsquo;s NPS contribution,
             professional tax and the tax already deducted. Nothing about
             deductions you claim yourself — those come later, and you are not

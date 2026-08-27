@@ -129,9 +129,7 @@ export default function RegisterPage() {
           Register as a new taxpayer
         </h1>
         <p className="mt-2 text-[14px] leading-relaxed text-ink-soft">
-          Three steps. The real portal asks for eleven fields across four pages
-          before it tells you whether your PAN is even eligible; this asks for what
-          it needs, when it needs it.
+          Three steps, asking for what it needs when it needs it.
         </p>
 
         <div className="mt-6 grid gap-6 sm:grid-cols-[10rem_1fr]">
@@ -207,7 +205,7 @@ export default function RegisterPage() {
                   label="Link my Aadhaar to this PAN"
                   description="Linking is mandatory. An unlinked PAN becomes inoperative, which means no refund, TDS at a higher rate, and returns that will not process."
                 />
-                <Callout tone="plum" title="What happens after this">
+                <Callout tone="plum" title="What happens after this" collapsible>
                   We will pull the synthetic Form 16, AIS and 26AS for Assessment
                   Year 2026-27 into your account, work out both regimes on your real
                   numbers, and show you what needs your attention. You can change

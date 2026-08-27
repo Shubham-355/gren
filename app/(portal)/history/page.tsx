@@ -199,7 +199,7 @@ export default function HistoryPage() {
         </Callout>
       ) : null}
 
-      <Callout tone="warn" title="How long to keep all this">
+      <Callout tone="warn" title="How long to keep all this" collapsible>
         The department can reopen an assessment up to three years after the end of
         the assessment year, and up to ten where the escaped income is above ₹50
         lakh. Keep your Form 16, your investment proofs and your rent receipts for

@@ -201,10 +201,8 @@ export default function ProfilePage() {
           <Row label="PAN" value={`${state.profile.pan} (synthetic)`} />
           <Row label="Aadhaar" value={state.profile.aadhaarMasked} />
           <p className="mt-2 text-[13px] leading-relaxed text-ink-soft">
-            Linking has been mandatory since 2023. An unlinked PAN is treated as
-            inoperative: refunds stop, tax is deducted from your salary at a higher
-            rate, and returns do not process. It is the single most consequential
-            switch on this page.
+            An unlinked PAN is treated as inoperative: refunds stop, tax is
+            deducted at a higher rate, and returns do not process.
           </p>
           {!state.profile.panAadhaarLinked ? (
             <Button
@@ -310,7 +308,7 @@ export default function ProfilePage() {
         )}
       </Card>
 
-      <Callout tone="warn" title="Reset the demo">
+      <Callout tone="warn" title="Reset the demo" collapsible>
         This clears every figure, decision and grievance back to the seeded state —
         useful before a fresh walkthrough. Your sign-in survives.
       </Callout>

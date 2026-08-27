@@ -136,7 +136,7 @@ export default function HousePropertyPage() {
                 </Field>
 
                 {!letOut ? (
-                  <Callout tone="warn" title="Careful if you also claim HRA">
+                  <Callout tone="warn" title="Careful if you also claim HRA" collapsible>
                     Claiming HRA on a rented home and self-occupied interest on a
                     house in the same city invites questions. It is allowed when the
                     facts support it — your own house is genuinely too far to live
@@ -144,7 +144,7 @@ export default function HousePropertyPage() {
                   </Callout>
                 ) : null}
 
-                <Callout tone="plum" title="The principal is claimed elsewhere">
+                <Callout tone="plum" title="The principal is claimed elsewhere" collapsible>
                   Only interest belongs on this page. The principal portion of your
                   EMI —{" "}
                   <span className="tnum">
@@ -231,7 +231,7 @@ export default function HousePropertyPage() {
           </div>
         </div>
       ) : (
-        <Callout tone="info" title="Nothing to declare here?">
+        <Callout tone="info" title="Nothing to declare here?" collapsible>
           If you do not own property, skip this. If you own one but live in it and
           have no home loan, there is still nothing to declare — a self-occupied
           house with no loan produces no income and no deduction.

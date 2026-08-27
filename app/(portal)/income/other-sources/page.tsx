@@ -178,7 +178,7 @@ export default function OtherSourcesPage() {
             </ul>
           </Card>
 
-          <Callout tone="info" title="No tax deducted does not mean no tax due">
+          <Callout tone="info" title="No tax deducted does not mean no tax due" collapsible>
             Banks only deduct tax once deposit interest crosses ₹50,000 in a year
             (₹1,00,000 for senior citizens), and never on savings interest. The
             income is taxable either way — the deduction is just a collection

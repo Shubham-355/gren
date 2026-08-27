@@ -223,7 +223,7 @@ export default function GrievancePage() {
         )}
       </div>
 
-      <Callout tone="info" title="What a unified flow actually buys you">
+      <Callout tone="info" title="What a unified flow actually buys you" collapsible>
         Today, a refund delay goes to CPC through e-Nivaran, a rude officer goes to
         CPGRAMS, and a broken login goes to the helpdesk — and if you pick wrong,
         your grievance is closed with &ldquo;not related to this department&rdquo;

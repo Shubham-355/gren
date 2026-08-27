@@ -77,9 +77,8 @@ export default function IncomeOverviewPage() {
         title="Where your money came from"
         intro={
           <>
-            Indian income tax sorts everything you earned into five heads, and each
-            head has its own rules before anything is added together. This
-            prototype goes deep on the three a salaried taxpayer actually uses.
+            Income tax sorts what you earned into five heads, each with its own
+            rules. This goes deep on the three a salaried taxpayer uses.
           </>
         }
       />
@@ -166,7 +165,7 @@ export default function IncomeOverviewPage() {
         ))}
       </div>
 
-      <Callout tone="info" title="Why capital gains and business are left out">
+      <Callout tone="info" title="Why capital gains and business are left out" collapsible>
         This is a six-day solo prototype, and it chose depth over breadth. The
         salaried ITR-1 and ITR-2 path is built properly end to end; capital gains
         and business income get an honest &ldquo;not built&rdquo; screen instead of

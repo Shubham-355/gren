@@ -520,7 +520,7 @@ function SectionList({ onGuided }: { onGuided: () => void }) {
             </div>
           </Card>
 
-          <Callout tone="info" title="Two deductions you never enter here">
+          <Callout tone="info" title="Two deductions you never enter here" collapsible>
             The standard deduction is applied automatically —{" "}
             {inr(current.standardDeduction)} this year. Your employer&rsquo;s NPS
             contribution under <Term name="80CCD(2)">80CCD(2)</Term> comes

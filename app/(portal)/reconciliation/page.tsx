@@ -726,7 +726,7 @@ function TisView({
         </div>
       </Card>
 
-      <Callout tone="info" title="Why there are three columns">
+      <Callout tone="info" title="Why there are three columns" collapsible>
         Reported is the raw sum of what third parties said. Processed is after the
         department removes duplicates — the same interest reported by both the bank
         and its head office, for instance. Derived is after your feedback is taken

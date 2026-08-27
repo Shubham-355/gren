@@ -101,7 +101,7 @@ export default function PaymentPage() {
             />
           </div>
         </Card>
-        <Callout tone="info" title="When would this screen have something on it?">
+        <Callout tone="info" title="When would this screen have something on it?" collapsible>
           Self-assessment tax under section 140A appears when the tax on your total
           income exceeds everything already deducted — usually because of interest
           or dividend income that nobody withheld enough on. Accepting a large AIS
@@ -214,7 +214,7 @@ export default function PaymentPage() {
         </div>
       </Card>
 
-      <Callout tone="info" title="Interest on top, if it applies">
+      <Callout tone="info" title="Interest on top, if it applies" collapsible>
         Where a large shortfall should have been paid as advance tax during the
         year, sections 234B and 234C add interest at 1% a month. On{" "}
         {inr(due)} that would be modest, but on a bigger gap it stops being modest
