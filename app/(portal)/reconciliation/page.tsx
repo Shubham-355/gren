@@ -23,6 +23,7 @@ import {
   totalTdsIn26AS,
   type AisEntry,
 } from "@/lib/data/seed";
+import { Expandable } from "@/components/ui/Expandable";
 import { inr } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
 import {
@@ -265,9 +266,9 @@ export default function ReconciliationPage() {
               : `${numberWord(pending.length)} differences to settle`}
           </h1>
           <p className="mt-3 max-w-[42rem] text-[15px] leading-relaxed text-ink-soft [text-wrap:pretty] sm:text-[16px]">
-            Banks, employers and companies report what they paid you. Where their
-            figure differs from yours, it is here — with what happened, what it
-            costs, and the buttons that end it.
+            Banks, employers and companies report what they paid you. Each
+            difference below has what happened, what it costs, and the buttons
+            that end it.
           </p>
 
           <div className="mt-6 space-y-4">
@@ -379,17 +380,20 @@ export default function ReconciliationPage() {
             </div>
           </Card>
 
-          <Card tone="alert" className="p-5">
-            <div className="text-[14px] font-semibold text-[color:var(--alert)]">
+          <details className="group rounded-[var(--radius)] border border-alert-100 bg-alert-50 p-5">
+            <summary className="cursor-pointer list-none text-[14px] font-semibold text-[color:var(--alert)]">
               Why not just skip it
-            </div>
+              <span className="ml-1.5 font-normal text-ink-faint group-open:hidden">
+                — read
+              </span>
+            </summary>
             <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-soft">
               The department compares your return against these figures
               automatically. Anything left out comes back as an{" "}
               <Term name="Intimation u/s 143(1)">intimation under 143(1)</Term> a
               few months later, with interest attached.
             </p>
-          </Card>
+          </details>
 
           <Button
             variant="secondary"
@@ -438,9 +442,10 @@ function MismatchCard({ entry }: { entry: AisEntry }) {
           <h2 className="mt-2.5 text-[18px] font-semibold leading-snug lg:text-[19px]">
             {headlineFor(entry)}
           </h2>
-          <p className="mt-2 max-w-[36rem] text-[14.5px] leading-relaxed text-ink-soft">
-            {entry.plainLanguage}
-          </p>
+          <Expandable
+            text={entry.plainLanguage}
+            className="mt-2 max-w-[36rem] text-[14.5px] leading-relaxed text-ink-soft"
+          />
         </div>
 
         <div className="w-full shrink-0 rounded-[var(--radius-sm)] bg-paper px-4 py-3.5 lg:w-[220px]">
