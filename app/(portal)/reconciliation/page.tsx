@@ -26,6 +26,8 @@ import { Expandable } from "@/components/ui/Expandable";
 import { inr } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
 import {
+  aisStatus,
+  declaredFor,
   pendingMismatches,
   toTaxpayerInput,
   useAppStore,
@@ -57,17 +59,20 @@ export default function ReconciliationPage() {
   const declaredTotals = aisEntries.map((e) => ({
     id: e.id,
     aisAmount: e.aisAmount,
-    declaredAmount:
-      state.reconciliation[e.id]?.resolvedAmount ?? e.declaredAmount,
+    declaredAmount: declaredFor(state, e.id),
   }));
   const tis = buildTis(declaredTotals);
 
   /** What the return would look like if every open entry were accepted. */
   const projected = useMemo(() => projectSettleAll(state), [state]);
 
-  const settled = aisEntries.filter(
-    (e) => state.reconciliation[e.id]?.resolution !== "pending",
+  // Three different things, and only the middle one is a decision you made.
+  const agreeing = aisEntries.filter((e) => aisStatus(state, e) === "agrees");
+  const settled = aisEntries.filter((e) => aisStatus(state, e) === "settled");
+  const informational = aisEntries.filter(
+    (e) => aisStatus(state, e) === "informational",
   );
+  const accountedFor = [...agreeing, ...settled, ...informational];
 
   /* ---------------------- the raw reference documents ------------------- */
   if (view !== "reconcile") {
@@ -151,8 +156,9 @@ export default function ReconciliationPage() {
             </Card>
 
             <Card className="overflow-hidden">
-              {settled.map((entry) => {
+              {accountedFor.map((entry) => {
                 const r = state.reconciliation[entry.id];
+                const status = aisStatus(state, entry);
                 return (
                   <div
                     key={entry.id}
@@ -168,23 +174,31 @@ export default function ReconciliationPage() {
                     </div>
                     <div className="shrink-0 text-right">
                       <div className="tnum text-[14px] font-medium">
-                        {inr(r?.resolvedAmount ?? entry.declaredAmount)}
+                        {inr(declaredFor(state, entry.id))}
                       </div>
-                      <button
-                        onClick={() =>
-                          state.resolveMismatch(
-                            entry.id,
-                            "pending" as MismatchResolution,
-                          )
-                        }
-                        className={cx(
-                          "text-[11.5px] font-semibold",
-                          outcomeTone(r?.resolution),
-                        )}
-                        title="Reopen this entry"
-                      >
-                        {outcomeLabel(entry, r?.resolution)}
-                      </button>
+                      {status === "settled" ? (
+                        <button
+                          onClick={() =>
+                            state.resolveMismatch(
+                              entry.id,
+                              "pending" as MismatchResolution,
+                            )
+                          }
+                          className={cx(
+                            "text-[11.5px] font-semibold",
+                            outcomeTone(r?.resolution),
+                          )}
+                          title="Reopen this entry"
+                        >
+                          {outcomeLabel(r?.resolution, declaredFor(state, entry.id), entry.aisAmount)}
+                        </button>
+                      ) : (
+                        <span className="text-[11.5px] text-ink-faint">
+                          {status === "informational"
+                            ? "Not income"
+                            : "Agrees with your return"}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -245,7 +259,7 @@ export default function ReconciliationPage() {
 
   /* ------------------------ differences to settle ----------------------- */
   const missingIncome = pending.reduce(
-    (sum, e) => sum + Math.max(0, e.aisAmount - e.declaredAmount),
+    (sum, e) => sum + Math.max(0, e.aisAmount - declaredFor(state, e.id)),
     0,
   );
   const unclaimedCredit = pending.reduce((sum, e) => sum + e.tdsDeducted, 0);
@@ -279,7 +293,7 @@ export default function ReconciliationPage() {
           {settled.length > 0 ? (
             <Card tone="sunk" className="mt-5">
               <CardHeader
-                title="Already settled"
+                title="Settled by you"
                 eyebrow={`${settled.length} ${settled.length === 1 ? "entry" : "entries"}`}
               />
               <ul className="divide-y divide-[color:var(--line)]">
@@ -320,6 +334,47 @@ export default function ReconciliationPage() {
                     </li>
                   );
                 })}
+              </ul>
+            </Card>
+          ) : null}
+
+          {/* Entries that agree with the return, and the SFT trail that is not
+              income at all. Neither carries an Undo: you never decided them,
+              so there is nothing of yours to take back. */}
+          {agreeing.length + informational.length > 0 ? (
+            <Card tone="sunk" className="mt-3.5">
+              <CardHeader
+                title="Nothing to do"
+                eyebrow={`${agreeing.length + informational.length} ${
+                  agreeing.length + informational.length === 1
+                    ? "entry"
+                    : "entries"
+                }`}
+              />
+              <ul className="divide-y divide-[color:var(--line)]">
+                {[...agreeing, ...informational].map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="flex items-center justify-between gap-3 px-4 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[13.5px] font-medium">
+                        {entry.description}
+                      </div>
+                      <div className="truncate text-[11.5px] text-ink-faint">
+                        {entry.source}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2.5">
+                      <span className="tnum text-[13px]">
+                        {inr(entry.aisAmount)}
+                      </span>
+                      <Badge tone="neutral">
+                        {entry.informational ? "Not income" : "Agrees"}
+                      </Badge>
+                    </div>
+                  </li>
+                ))}
               </ul>
             </Card>
           ) : null}
@@ -414,10 +469,11 @@ export default function ReconciliationPage() {
 
 function MismatchCard({ entry }: { entry: AisEntry }) {
   const resolveMismatch = useAppStore((s) => s.resolveMismatch);
+  const declared = useAppStore((s) => declaredFor(s, entry.id));
   const [correcting, setCorrecting] = useState(false);
   const [amount, setAmount] = useState(entry.aisAmount);
 
-  const gap = entry.aisAmount - entry.declaredAmount;
+  const gap = entry.aisAmount - declared;
   const isAction = entry.severity === "action";
 
   return (
@@ -426,7 +482,7 @@ function MismatchCard({ entry }: { entry: AisEntry }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2.5">
             <Badge tone={isAction ? "alert" : "warn"}>
-              {entry.declaredAmount === 0 && isAction
+              {declared === 0 && isAction
                 ? "Missing from your return"
                 : gap > 0 && isAction
                   ? `${inr(gap)} short`
@@ -466,7 +522,7 @@ function MismatchCard({ entry }: { entry: AisEntry }) {
                   : "text-ink-faint",
               )}
             >
-              {inr(entry.declaredAmount)}
+              {inr(declared)}
             </div>
           </div>
         </div>
@@ -500,7 +556,7 @@ function MismatchCard({ entry }: { entry: AisEntry }) {
             className="w-full sm:w-auto"
             onClick={() => resolveMismatch(entry.id, "accepted")}
           >
-            {acceptLabel(entry, gap)}
+            {acceptLabel(entry, gap, declared)}
           </Button>
           {isAction ? (
             <Button
@@ -544,7 +600,9 @@ function projectSettleAll(state: AppState) {
   };
 
   for (const entry of aisEntries) {
-    if (state.reconciliation[entry.id]?.resolution !== "pending") continue;
+    // Only entries still asking for a decision. An entry that already agrees
+    // with the return, or that is not income at all, has nothing to add.
+    if (aisStatus(state, entry) !== "open") continue;
     const field = fieldFor[entry.id];
     if (field) otherSources[field] = entry.aisAmount;
     extraTds += entry.tdsDeducted;
@@ -582,22 +640,26 @@ function headlineFor(entry: AisEntry): string {
   return headlines[entry.id] ?? entry.description;
 }
 
-function acceptLabel(entry: AisEntry, gap: number): string {
+function acceptLabel(entry: AisEntry, gap: number, declared: number): string {
   if (entry.severity === "attention") {
     return `It is my income — add ${inr(entry.aisAmount)}`;
   }
-  if (entry.declaredAmount === 0 && entry.tdsDeducted > 0) {
+  if (declared === 0 && entry.tdsDeducted > 0) {
     return `Add ${inr(entry.aisAmount)} and claim the ${inr(entry.tdsDeducted)}`;
   }
   if (gap > 0) return `Use ${inr(entry.aisAmount)}`;
   return `Accept ${inr(entry.aisAmount)}`;
 }
 
-function outcomeLabel(entry: AisEntry, resolution: string | undefined): string {
+function outcomeLabel(
+  resolution: string | undefined,
+  declared: number,
+  aisAmount: number,
+): string {
   switch (resolution) {
     case "accepted":
-      if (entry.declaredAmount === 0) return "added";
-      return entry.declaredAmount === entry.aisAmount ? "matched" : "corrected";
+      if (declared === 0) return "added";
+      return declared === aisAmount ? "matched" : "corrected";
     case "amount-corrected":
       return "corrected";
     case "other-pan":
@@ -607,7 +669,9 @@ function outcomeLabel(entry: AisEntry, resolution: string | undefined): string {
     case "denied":
       return "disagreed";
     default:
-      return entry.category === "SFT" ? "not income" : "matched";
+      // Only ever called for an entry the taxpayer actually resolved, so
+      // there is no pending case left to name here.
+      return "settled";
   }
 }
 

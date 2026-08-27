@@ -10,6 +10,7 @@ import {
 import { FLOW_STEPS, nextStep, stepDone } from "@/lib/flow";
 import { inrPlain } from "@/lib/format";
 import {
+  declaredFor,
   pendingMismatches,
   refundStage,
   toTaxpayerInput,
@@ -177,9 +178,9 @@ export function buildScreenContext(state: AppState, pathname: string) {
         description: e.description,
         source: e.source,
         aisAmount: e.aisAmount,
-        declaredAmount: e.declaredAmount,
+        declaredAmount: declaredFor(state, e.id),
         tdsDeducted: e.tdsDeducted,
-        gap: e.aisAmount - e.declaredAmount,
+        gap: e.aisAmount - declaredFor(state, e.id),
         whyItMatters: e.plainLanguage,
       })),
       resolved: Object.values(state.reconciliation)

@@ -175,12 +175,16 @@ export type AisEntry = {
   source: string;
   sourcePan: string;
   aisAmount: number;
-  /** what the taxpayer has actually declared in this return so far */
-  declaredAmount: number;
   tdsDeducted: number;
   /** plain-language explanation of the gap, shown in the reconciliation UI */
   plainLanguage: string;
   severity: "match" | "attention" | "action";
+  /**
+   * Reported to the department but not income — an SFT purchase trail, say.
+   * There is no figure in the return for it to agree or disagree with, so it
+   * is never something to settle and never counts as outstanding.
+   */
+  informational?: boolean;
 };
 
 export const aisEntries: AisEntry[] = [
@@ -191,11 +195,10 @@ export const aisEntries: AisEntry[] = [
     source: "Vermillion Systems Private Limited",
     sourcePan: "AABCV5678K",
     aisAmount: grossSalaryFromForm16,
-    declaredAmount: grossSalaryFromForm16,
     tdsDeducted: 245_000,
     plainLanguage:
-      "Your employer reported the same salary you have entered. Nothing to do.",
-    severity: "match",
+      "Your employer has reported this salary to the department. Import your Form 16 on the salary screen and it lands in your return exactly as reported — until then the return has nothing under salary at all, which is the one gap the department notices immediately.",
+    severity: "action",
   },
   {
     id: "ais-savings-interest",
@@ -204,7 +207,6 @@ export const aisEntries: AisEntry[] = [
     source: "Meridian Bank",
     sourcePan: "AAACM2233L",
     aisAmount: 14_850,
-    declaredAmount: 14_850,
     tdsDeducted: 0,
     plainLanguage:
       "Savings account interest matches what you have declared. Remember it is taxable even though no TDS was cut — the 80TTA deduction covers the first ₹10,000 under the old regime.",
@@ -217,7 +219,6 @@ export const aisEntries: AisEntry[] = [
     source: "Meridian Bank",
     sourcePan: "AAACM2233L",
     aisAmount: 42_300,
-    declaredAmount: 0,
     tdsDeducted: 4_230,
     plainLanguage:
       "Your bank told the department you earned ₹42,300 of fixed deposit interest and already deducted ₹4,230 of TDS on it. You have not declared this anywhere in your return. If you leave it out, the department's system will flag the return automatically.",
@@ -230,7 +231,6 @@ export const aisEntries: AisEntry[] = [
     source: "Helios Industries Limited",
     sourcePan: "AAACH7788M",
     aisAmount: 8_400,
-    declaredAmount: 6_000,
     tdsDeducted: 840,
     plainLanguage:
       "AIS shows ₹8,400 of dividend but you have declared ₹6,000 — a gap of ₹2,400. The likely cause is a dividend credited late in March that you had not counted.",
@@ -243,7 +243,6 @@ export const aisEntries: AisEntry[] = [
     source: "Kaveri Co-operative Bank",
     sourcePan: "AAACK9911N",
     aisAmount: 9_200,
-    declaredAmount: 0,
     tdsDeducted: 0,
     plainLanguage:
       "This is a joint account where you are the second holder. If the interest belongs to the first holder, you can submit feedback saying the information relates to another PAN instead of adding it to your income.",
@@ -256,11 +255,11 @@ export const aisEntries: AisEntry[] = [
     source: "Cobalt Asset Management",
     sourcePan: "AAACC4455P",
     aisAmount: 180_000,
-    declaredAmount: 180_000,
     tdsDeducted: 0,
     plainLanguage:
       "This is an information-only entry. Buying mutual fund units is not income — it appears here so the department can see the money trail. ₹36,000 of this was an ELSS purchase, which is eligible for 80C.",
     severity: "match",
+    informational: true,
   },
 ];
 

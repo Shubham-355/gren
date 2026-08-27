@@ -140,6 +140,12 @@ export type UndoPayload =
       itemId: string;
       previous: MismatchResolution;
       previousAmount: number | null;
+      /**
+       * What the return itself held for this entry before the resolution.
+       * Undo used to fall back to the seed's `declaredAmount` here, which put
+       * back a number the taxpayer may never have entered.
+       */
+      previousDeclared: number;
     }
   | { kind: "income"; field: IncomeField; previous: number }
   | {
@@ -401,17 +407,27 @@ const initialDeductions: DeductionInput = {
   s80U: 0,
 };
 
+/**
+ * Nothing arrives already settled.
+ *
+ * These used to open with the three "match" entries marked accepted, stamped
+ * with a resolved-at time and carrying an Undo button — for a decision the
+ * taxpayer had never made. One of them claimed agreement on a salary figure
+ * that is not in the return at all until Form 16 is imported.
+ *
+ * An entry that agrees with your return is not a decision, it is an
+ * observation, and `aisStatus` works it out live. What lands here is only what
+ * you actually chose.
+ */
 const initialReconciliation: Record<string, ReconciliationItem> =
   Object.fromEntries(
     aisEntries.map((e) => [
       e.id,
       {
         id: e.id,
-        resolution: (e.severity === "match"
-          ? "accepted"
-          : "pending") as MismatchResolution,
-        resolvedAmount: e.severity === "match" ? e.aisAmount : null,
-        resolvedAt: e.severity === "match" ? nowIso() : null,
+        resolution: "pending" as MismatchResolution,
+        resolvedAmount: null,
+        resolvedAt: null,
       },
     ]),
   );
@@ -732,6 +748,8 @@ export const useAppStore = create<AppState>()(
         }
 
         const before = get().reconciliation[itemId];
+        const declaredBefore = declaredFor(get(), itemId);
+        const rawDeclaredBefore = AIS_DECLARED[itemId]?.(get()) ?? 0;
         const taxBefore = taxNow(get());
         const accepted =
           resolution === "accepted" || resolution === "amount-corrected";
@@ -743,7 +761,7 @@ export const useAppStore = create<AppState>()(
               ? (correctedAmount ?? entry.aisAmount)
               : resolution === "other-pan" || resolution === "duplicate"
                 ? 0
-                : entry.declaredAmount;
+                : declaredBefore;
 
         set((s) => ({
           reconciliation: {
@@ -764,12 +782,10 @@ export const useAppStore = create<AppState>()(
         if (field) {
           if (accepted) {
             get().setOtherSource(field, amount);
-          } else if (resolution === "pending") {
-            // Undo — put the head back to what the taxpayer had said.
-            get().setOtherSource(field, entry.declaredAmount);
           } else {
-            // Feedback sent to the reporting entity; nothing enters the return.
-            get().setOtherSource(field, entry.declaredAmount);
+            // Undo, or feedback sent to the reporting entity. Either way the
+            // head goes back to whatever the return itself holds.
+            get().setOtherSource(field, rawDeclaredBefore);
           }
         }
 
@@ -780,7 +796,7 @@ export const useAppStore = create<AppState>()(
           tool: "resolve_mismatch",
           summary,
           delta: taxAfter - taxBefore,
-          why: `${entry.source} reported ₹${entry.aisAmount.toLocaleString("en-IN")}; you had declared ₹${entry.declaredAmount.toLocaleString("en-IN")}. ${
+          why: `${entry.source} reported ₹${entry.aisAmount.toLocaleString("en-IN")}; you had declared ₹${declaredBefore.toLocaleString("en-IN")}. ${
             accepted
               ? `Taking their figure adds ₹${amount.toLocaleString("en-IN")} to your income and claims the ₹${entry.tdsDeducted.toLocaleString("en-IN")} of tax already deducted on it.`
               : "The amount stays out of your return, and the feedback goes back to the reporting entity."
@@ -791,6 +807,7 @@ export const useAppStore = create<AppState>()(
                 itemId,
                 previous: before.resolution,
                 previousAmount: before.resolvedAmount,
+                previousDeclared: rawDeclaredBefore,
               }
             : undefined,
         });
@@ -997,7 +1014,7 @@ export const useAppStore = create<AppState>()(
               const restore =
                 u.previous === "accepted" || u.previous === "amount-corrected"
                   ? (u.previousAmount ?? seedEntry.aisAmount)
-                  : seedEntry.declaredAmount;
+                  : u.previousDeclared;
               set((s) => ({
                 otherSources: { ...s.otherSources, [field]: restore },
               }));
@@ -1131,8 +1148,12 @@ export const useAppStore = create<AppState>()(
       // Renamed with the redesign: the persisted shape gained the action
       // timeline's undo payloads and the Tier 3 confirmation, and the seeded
       // identity changed. A stale v1 session would show the old PAN.
-      name: "taxsaathi-session-v2",
-      version: 2,
+      // Bumped from v2: sessions saved before this carry a reconciliation
+      // map with entries already marked accepted, which is exactly the
+      // fabricated state this version stopped creating. Restoring one would
+      // keep showing "settled" for decisions nobody made, so they start over.
+      name: "taxsaathi-session-v3",
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       // Rehydration is kicked off manually from a client effect so that the
       // first client render matches what the server sent.
@@ -1274,10 +1295,55 @@ export function tdsOnOtherIncome(s: AppState): number {
   }, 0);
 }
 
+/**
+ * What the return currently says for a given AIS entry, read live off the
+ * store rather than off the seed.
+ *
+ * The seed carries a `declaredAmount` per entry, which was a snapshot of one
+ * moment and stopped being true the instant anyone typed a figure — most
+ * visibly for salary, which the seed claimed you had declared while the return
+ * held nothing until Form 16 was imported.
+ */
+const AIS_DECLARED: Record<string, ((s: AppState) => number) | undefined> = {
+  "ais-salary": (s) =>
+    s.salary.basic +
+    s.salary.hra +
+    s.salary.specialAllowance +
+    s.salary.lta +
+    s.salary.otherAllowances +
+    s.salary.employerNps,
+  "ais-savings-interest": (s) => s.otherSources.savingsInterest,
+  "ais-fd-interest": (s) => s.otherSources.fdInterest,
+  "ais-dividend": (s) => s.otherSources.dividend,
+  "ais-kaveri-interest": (s) => s.otherSources.other,
+};
+
+export function declaredFor(s: AppState, entryId: string): number {
+  const resolved = s.reconciliation[entryId];
+  if (resolved && resolved.resolution !== "pending") {
+    return resolved.resolvedAmount ?? 0;
+  }
+  return AIS_DECLARED[entryId]?.(s) ?? 0;
+}
+
+export type AisStatus = "informational" | "agrees" | "settled" | "open";
+
+/**
+ * Four states, not two. An entry you decided is "settled"; one that happens to
+ * match your return is "agrees" and needs no decision at all; an SFT purchase
+ * trail is "informational" and never will.
+ */
+export function aisStatus(s: AppState, entry: AisEntry): AisStatus {
+  if (entry.informational) return "informational";
+  if ((s.reconciliation[entry.id]?.resolution ?? "pending") !== "pending") {
+    return "settled";
+  }
+  return declaredFor(s, entry.id) === entry.aisAmount ? "agrees" : "open";
+}
+
+/** Only the entries genuinely asking the taxpayer for a decision. */
 export function pendingMismatches(s: AppState): AisEntry[] {
-  return aisEntries.filter(
-    (e) => s.reconciliation[e.id]?.resolution === "pending",
-  );
+  return aisEntries.filter((e) => aisStatus(s, e) === "open");
 }
 
 export function refundStage(s: AppState): RefundStage {
