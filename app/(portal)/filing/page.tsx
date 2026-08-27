@@ -10,7 +10,6 @@ import {
   Callout,
   Card,
   ComputedTag,
-  DemoTag,
   PageHeader,
   Stat,
   Term,
@@ -172,8 +171,8 @@ export default function FilingPage() {
               <div className="min-w-0">
                 <div className="text-[15px] font-semibold">Personal &amp; PAN</div>
                 <div className="mt-1 text-[13.5px] text-ink-faint">
-                  {state.profile.name} · PAN {state.profile.pan}
-                  <DemoTag label="synthetic" /> · AY {ASSESSMENT_YEAR} ·{" "}
+                  {state.profile.name} · PAN {state.profile.pan} · AY{" "}
+                  {ASSESSMENT_YEAR} ·{" "}
                   <button
                     onClick={() => setShowForm(!showForm)}
                     className="tap font-medium text-[color:var(--plum)] underline underline-offset-2"
@@ -347,7 +346,10 @@ export default function FilingPage() {
             <div className="flex items-center justify-between gap-3 px-5 py-4">
               <div className="min-w-0">
                 <div className="text-[15px] font-semibold">Refund account</div>
-                <div className="mt-1 truncate text-[13.5px] text-ink-faint">
+                {/* Wraps on a phone. Truncating left the line reading
+                    "pre-validate…", which hides the one fact the line exists
+                    to state. */}
+                <div className="mt-1 text-[13.5px] leading-snug text-ink-faint lg:truncate">
                   {refundAccount
                     ? `${refundAccount.bank} ···· ${refundAccount.accountNumberMasked.slice(-4)} · ${refundAccount.validated ? "pre-validated" : "not validated"} · IFSC ${refundAccount.ifsc}`
                     : "None nominated"}
@@ -521,7 +523,7 @@ function ReviewSection({
         <div className="text-[15px] font-semibold">{title}</div>
         <Link
           href={href}
-          className="shrink-0 text-[13.5px] font-medium text-[color:var(--plum)]"
+          className="tap shrink-0 text-[13.5px] font-medium text-[color:var(--plum)]"
         >
           Edit
         </Link>
@@ -580,7 +582,6 @@ function AlreadySubmitted() {
                 {state.filing.acknowledgementNumber}
               </span>
             }
-            tag={<DemoTag />}
           />
           <Stat
             label="Submitted"

@@ -9,7 +9,6 @@ import {
   Card,
   CardHeader,
   ComputedTag,
-  DemoTag,
   PageHeader,
   Row,
   Stat,
@@ -120,7 +119,6 @@ export default function RefundPage() {
                     {state.filing.acknowledgementNumber}
                   </span>
                 }
-                tag={<DemoTag />}
               />
               <Stat
                 label="Going to"
@@ -142,7 +140,6 @@ export default function RefundPage() {
             <CardHeader
               title="Progress"
               eyebrow="Plain language at every stage"
-              action={<DemoTag label="simulated timing" />}
             />
             <ol className="px-4 py-4">
               {stages.map((s, i) => {
@@ -274,7 +271,6 @@ export default function RefundPage() {
               <div>
                 <div className="text-[13.5px] font-medium">
                   AY {f.assessmentYear}
-                  <DemoTag />
                 </div>
                 <div className="text-[12px] text-ink-faint">
                   {f.refundCreditedOn

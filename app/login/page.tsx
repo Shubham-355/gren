@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Wordmark } from "@/components/shell/AppShell";
 import { Disclaimer } from "@/components/shell/Disclaimer";
@@ -38,6 +38,15 @@ export default function LoginPage() {
   const [otp, setOtp] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
+  const [verifying, setVerifying] = useState(false);
+  const verifyTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (verifyTimer.current !== null) window.clearTimeout(verifyTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (hydrated && loggedIn) router.replace("/dashboard");
@@ -69,14 +78,23 @@ export default function LoginPage() {
     setStage("otp");
   }
 
+  // The check is simulated, but a sign-in that lands on the dashboard in
+  // zero milliseconds reads as a form that skipped a step rather than a fast
+  // one — you never see the code you typed get accepted. Two seconds of an
+  // honest "Verifying" is what the real gesture costs, and it is long enough
+  // to be believed.
   function verify(code = otp) {
+    if (verifying) return;
     if (code.replace(/\D/g, "").length !== 6) {
       setError("The OTP is six digits. Any six will do — this is simulated.");
       return;
     }
     setError(null);
-    login(method);
-    router.push("/dashboard");
+    setVerifying(true);
+    verifyTimer.current = window.setTimeout(() => {
+      login(method);
+      router.push("/dashboard");
+    }, 2000);
   }
 
   const maskedMobile = `••${taxpayer.mobile.slice(-4)}`;
@@ -129,8 +147,9 @@ export default function LoginPage() {
                   setError(null);
                 }}
                 aria-pressed={method === m}
+                disabled={verifying}
                 className={cx(
-                  "flex-1 rounded-[8px] py-2.5 text-[14px] transition-colors",
+                  "flex-1 rounded-[8px] py-2.5 text-[14px] transition-colors disabled:opacity-45",
                   method === m
                     ? "bg-surface font-semibold shadow-[0_1px_2px_rgba(28,24,27,.08)]"
                     : "text-ink-soft",
@@ -157,6 +176,7 @@ export default function LoginPage() {
               }}
               autoComplete="off"
               spellCheck={false}
+              disabled={verifying}
               maxLength={method === "pan" ? 10 : 12}
               className="mono mt-2.5 h-[56px] w-full rounded-[var(--radius-sm)] border-[1.5px] border-[color:var(--plum)] bg-surface px-[18px] text-[19px] tracking-[0.14em] text-ink focus:outline-none"
             />
@@ -177,6 +197,7 @@ export default function LoginPage() {
                   value={otp}
                   onChange={setOtp}
                   onComplete={verify}
+                  disabled={verifying}
                   autoFocus
                 />
               </div>
@@ -191,7 +212,8 @@ export default function LoginPage() {
                     setOtp("");
                     setError(null);
                   }}
-                  className="text-[13px] font-medium text-[color:var(--plum)]"
+                  disabled={verifying}
+                  className="tap text-[13px] font-medium text-[color:var(--plum)] disabled:opacity-45"
                 >
                   Change
                 </button>
@@ -211,8 +233,13 @@ export default function LoginPage() {
                 Send OTP
               </Button>
             ) : (
-              <Button block size="lg" onClick={() => verify()}>
-                Verify &amp; continue
+              <Button
+                block
+                size="lg"
+                pending={verifying}
+                onClick={() => verify()}
+              >
+                {verifying ? "Verifying" : "Verify & continue"}
               </Button>
             )}
           </div>

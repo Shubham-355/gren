@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui";
 import { useAppStore } from "@/lib/store/useAppStore";
@@ -18,6 +18,13 @@ import { useAppStore } from "@/lib/store/useAppStore";
  * own card and needs its own fresh tap, so the gesture stays tied to a read
  * rather than a reflex.
  */
+/** What the confirm button says while the simulated round trip is running. */
+const BUSY_LABEL = {
+  submit: "Filing your return",
+  everify: "Verifying",
+  payment: "Paying",
+} as const;
+
 export function ConfirmationGate() {
   const router = useRouter();
   const pending = useAppStore((s) => s.pendingConfirmation);
@@ -26,6 +33,14 @@ export function ConfirmationGate() {
   const everify = useAppStore((s) => s.everify);
   const payTax = useAppStore((s) => s.payTax);
   const [working, setWorking] = useState(false);
+  const timer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!pending) return;
@@ -38,30 +53,38 @@ export function ConfirmationGate() {
 
   if (!pending) return null;
 
+  // This is the one tap in the app with a consequence behind it, and it used
+  // to resolve in the same frame — you pressed "Submit my return" and an
+  // acknowledgement number was simply already there. Nothing had visibly
+  // happened, so nothing felt like it had. The work is still instant; the
+  // wait is what makes it legible.
   function confirm() {
     if (!pending || working) return;
+    const request = pending;
     setWorking(true);
-    switch (pending.kind) {
-      case "submit": {
-        const ack = `SYN${Date.now().toString().slice(-9)}${Math.floor(
-          Math.random() * 900 + 100,
-        )}`;
-        submitReturn(ack);
-        dismiss();
-        router.push("/filing/confirmation");
-        break;
+    timer.current = window.setTimeout(() => {
+      switch (request.kind) {
+        case "submit": {
+          const ack = `SYN${Date.now().toString().slice(-9)}${Math.floor(
+            Math.random() * 900 + 100,
+          )}`;
+          submitReturn(ack);
+          dismiss();
+          router.push("/filing/confirmation");
+          break;
+        }
+        case "everify":
+          everify();
+          dismiss();
+          router.push("/filing/confirmation");
+          break;
+        case "payment":
+          payTax(request.amount ?? 0);
+          dismiss();
+          break;
       }
-      case "everify":
-        everify();
-        dismiss();
-        router.push("/filing/confirmation");
-        break;
-      case "payment":
-        payTax(pending.amount ?? 0);
-        dismiss();
-        break;
-    }
-    setWorking(false);
+      setWorking(false);
+    }, 1900);
   }
 
   return (
@@ -115,13 +138,19 @@ export function ConfirmationGate() {
         ) : null}
 
         <div className="mt-5 flex flex-col gap-2.5 sm:flex-row-reverse">
-          <Button size="lg" onClick={confirm} disabled={working} className="sm:flex-1">
-            {pending.confirmLabel}
+          <Button
+            size="lg"
+            onClick={confirm}
+            pending={working}
+            className="sm:flex-1"
+          >
+            {working ? BUSY_LABEL[pending.kind] : pending.confirmLabel}
           </Button>
           <Button
             size="lg"
             variant="secondary"
             onClick={dismiss}
+            disabled={working}
             className="sm:flex-1"
           >
             Not yet — let me look again

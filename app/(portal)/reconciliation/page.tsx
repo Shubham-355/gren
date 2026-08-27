@@ -9,7 +9,6 @@ import {
   Callout,
   Card,
   CardHeader,
-  DemoTag,
   LinkButton,
   MoneyInput,
   Row,
@@ -435,7 +434,6 @@ function MismatchCard({ entry }: { entry: AisEntry }) {
             </Badge>
             <span className="text-[12.5px] text-ink-faint">
               {entry.source} · {entry.category.toLowerCase()}
-              <DemoTag />
             </span>
           </div>
 
@@ -448,23 +446,28 @@ function MismatchCard({ entry }: { entry: AisEntry }) {
           />
         </div>
 
-        <div className="w-full shrink-0 rounded-[var(--radius-sm)] bg-paper px-4 py-3.5 lg:w-[220px]">
-          <div className="text-[12px] text-ink-faint">They were told</div>
-          <div className="tnum font-display text-[28px] leading-tight">
-            {inr(entry.aisAmount)}
+        {/* Side by side on a phone, stacked in the narrow column on desktop.
+            Two figures that exist to be compared should be readable in one
+            glance, and stacked they were a scroll apart on a small screen. */}
+        <div className="grid w-full shrink-0 grid-cols-2 gap-x-4 rounded-[var(--radius-sm)] bg-paper px-4 py-3.5 lg:w-[220px] lg:grid-cols-1 lg:gap-x-0">
+          <div className="min-w-0">
+            <div className="text-[12px] text-ink-faint">They were told</div>
+            <div className="tnum font-display text-[26px] leading-tight sm:text-[28px]">
+              {inr(entry.aisAmount)}
+            </div>
           </div>
-          <div className="mt-2.5 border-t border-line pt-2.5 text-[12px] text-ink-faint">
-            You declared
-          </div>
-          <div
-            className={cx(
-              "tnum font-display text-[28px] leading-tight",
-              gap !== 0 && isAction
-                ? "text-[color:var(--alert)]"
-                : "text-ink-faint",
-            )}
-          >
-            {inr(entry.declaredAmount)}
+          <div className="min-w-0 border-l border-line pl-4 lg:mt-2.5 lg:border-l-0 lg:border-t lg:pl-0 lg:pt-2.5">
+            <div className="text-[12px] text-ink-faint">You declared</div>
+            <div
+              className={cx(
+                "tnum font-display text-[26px] leading-tight sm:text-[28px]",
+                gap !== 0 && isAction
+                  ? "text-[color:var(--alert)]"
+                  : "text-ink-faint",
+              )}
+            >
+              {inr(entry.declaredAmount)}
+            </div>
           </div>
         </div>
       </div>
@@ -630,7 +633,6 @@ function AisView() {
         title="Annual Information Statement"
         eyebrow={<Term name="AIS">What is an AIS?</Term>}
         description="Every transaction reported against your PAN this year, by whoever reported it."
-        action={<DemoTag label="synthetic" />}
       />
       <ul className="divide-y divide-[color:var(--line)]">
         {aisEntries.map((entry) => {
@@ -682,7 +684,6 @@ function TisView({
           title="Taxpayer Information Summary"
           eyebrow={<Term name="TIS">What is a TIS?</Term>}
           description="The AIS collapsed to one line per head of income. The derived value is what flows into your prefilled return."
-          action={<DemoTag label="synthetic" />}
         />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[30rem] text-[13px]">
@@ -748,7 +749,6 @@ function Form26ASView() {
           title="Form 26AS"
           eyebrow={<Term name="Form 26AS">What is 26AS?</Term>}
           description="Tax already deposited against your PAN. You can only claim credit for what appears here."
-          action={<DemoTag label="synthetic" />}
         />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[34rem] text-[13px]">

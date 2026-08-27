@@ -8,7 +8,6 @@ import {
   Card,
   CardHeader,
   ComputedTag,
-  DemoTag,
   PageHeader,
   Row,
   Stat,
@@ -66,7 +65,6 @@ export default function HistoryPage() {
           <Stat
             label={`Income, AY ${previous.assessmentYear}`}
             value={inr(previous.grossTotalIncome)}
-            tag={<DemoTag />}
           />
           <Stat
             label="Tax this year"
@@ -107,7 +105,6 @@ export default function HistoryPage() {
                     <Badge tone={statusTone(record.status)}>{record.status}</Badge>
                     <Badge tone="neutral">{record.form}</Badge>
                     <Badge tone="neutral">{record.regime} regime</Badge>
-                    {record.assessmentYear !== ASSESSMENT_YEAR ? <DemoTag /> : null}
                   </div>
                   <p className="mt-1 text-[12.5px] text-ink-faint">
                     Filed {shortDate(record.filedOn)}

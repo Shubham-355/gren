@@ -17,6 +17,7 @@ export function OtpInput({
   onComplete,
   autoFocus,
   size = "md",
+  disabled,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -24,6 +25,9 @@ export function OtpInput({
   onComplete?: (value: string) => void;
   autoFocus?: boolean;
   size?: "md" | "lg";
+  /** Locked while the code is being checked, so the six boxes cannot be
+      edited out from under a verification that is already running. */
+  disabled?: boolean;
 }) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const digits = value.padEnd(6, " ").slice(0, 6).split("");
@@ -66,6 +70,7 @@ export function OtpInput({
             refs.current[i] = el;
           }}
           value={d.trim()}
+          disabled={disabled}
           inputMode="numeric"
           maxLength={1}
           size={1}
@@ -79,6 +84,7 @@ export function OtpInput({
             // attribute, and without this the six boxes refuse to shrink and
             // push the card off the side of the screen.
             "mono w-full min-w-0 flex-1 rounded-[11px] border bg-surface text-center text-ink transition-colors",
+            "disabled:cursor-not-allowed disabled:opacity-55",
             size === "lg" ? "h-[60px] text-[22px]" : "h-[56px] text-[21px]",
             d.trim()
               ? "border-line-strong"

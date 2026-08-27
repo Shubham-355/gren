@@ -9,7 +9,6 @@ import {
   Callout,
   Card,
   CardHeader,
-  DemoTag,
   Field,
   PageHeader,
   Row,
@@ -103,7 +102,6 @@ export default function ProfilePage() {
           <CardHeader
             title="Personal information"
             eyebrow="From your PAN record"
-            action={<DemoTag label="synthetic" />}
           />
           <div className="grid gap-4 px-4 py-4">
             <Field label="Full name">
@@ -232,7 +230,6 @@ export default function ProfilePage() {
           title="Bank accounts"
           eyebrow="Where a refund would go"
           description="A refund can only be credited to a validated account whose name matches your PAN."
-          action={<DemoTag label="synthetic" />}
         />
         <ul className="divide-y divide-[color:var(--line)]">
           {state.profile.bankAccounts.map((account) => (

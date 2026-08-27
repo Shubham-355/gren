@@ -11,7 +11,6 @@ import {
   CardHeader,
   ChoiceGroup,
   ComputedTag,
-  DemoTag,
   PageHeader,
   Row,
   Stat,
@@ -50,7 +49,6 @@ export default function PaymentPage() {
                   {state.filing.paymentChallan}
                 </span>
               }
-              tag={<DemoTag />}
             />
             <Stat
               label="Amount"

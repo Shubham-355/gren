@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo } from "react";
 
-import { Button, Card, LinkButton, cx } from "@/components/ui";
+import { Card, LinkButton, cx } from "@/components/ui";
 import { notices as seededNotices } from "@/lib/data/seed";
 import { FLOW_STEPS, nextStep, stepDone } from "@/lib/flow";
 import { inr } from "@/lib/format";
@@ -266,19 +266,6 @@ export default function DashboardPage() {
               </div>
             ) : null}
           </Card>
-
-          <details className="rounded-[var(--radius)] border border-line bg-surface px-5 py-4">
-            <summary className="tap cursor-pointer list-none text-[13.5px] font-medium text-ink-soft">
-              Reset this demo
-            </summary>
-            <p className="mt-2 text-[12.5px] leading-relaxed text-ink-faint">
-              Puts every figure, decision and timeline entry back to the seeded
-              starting point.
-            </p>
-            <div className="mt-3">
-              <ResetButton />
-            </div>
-          </details>
         </div>
       </div>
     </div>
@@ -286,15 +273,6 @@ export default function DashboardPage() {
 }
 
 /* ---------------------------------------------------------------- */
-
-function ResetButton() {
-  const resetDemo = useAppStore((s) => s.resetDemo);
-  return (
-    <Button variant="secondary" size="sm" onClick={resetDemo}>
-      Reset demo data
-    </Button>
-  );
-}
 
 function GlanceCard({
   label,

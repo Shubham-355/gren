@@ -6,7 +6,6 @@ import {
   Badge,
   Callout,
   Card,
-  DemoTag,
   PageHeader,
   Stat,
   Term,
@@ -38,7 +37,7 @@ export default function NoticesPage() {
 
       <Card tone={open.length > 0 ? "alert" : "ok"}>
         <div className="grid grid-cols-3 gap-4 px-4 py-3.5">
-          <Stat label="Total" value={notices.length} tag={<DemoTag />} />
+          <Stat label="Total" value={notices.length} />
           <Stat
             label="Need a reply"
             value={open.length}
@@ -86,7 +85,6 @@ export default function NoticesPage() {
                     <span className="text-[11.5px] text-ink-faint">
                       AY {notice.assessmentYear} · issued {shortDate(notice.issuedOn)}
                     </span>
-                    <DemoTag />
                   </div>
 
                   <h2 className="mt-1.5 text-[15.5px] font-semibold leading-snug">

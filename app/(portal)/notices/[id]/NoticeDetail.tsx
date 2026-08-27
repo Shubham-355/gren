@@ -9,7 +9,6 @@ import {
   Callout,
   Card,
   CardHeader,
-  DemoTag,
   PageHeader,
   Row,
   cx,
@@ -69,7 +68,7 @@ export function NoticeDetail({ notice }: { notice: Notice }) {
 
       <Card>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 px-4 py-3.5 sm:grid-cols-4">
-          <Meta label="Reference" value={notice.reference} mono demo />
+          <Meta label="Reference" value={notice.reference} mono />
           <Meta label="Issued" value={shortDate(notice.issuedOn)} />
           <Meta
             label="Respond by"
@@ -118,7 +117,7 @@ export function NoticeDetail({ notice }: { notice: Notice }) {
             <p className="mt-2 text-[11.5px] text-ink-faint">
               Synthetic text written for this prototype in the register a real
               notice uses. It is not a copy of any actual departmental
-              communication. <DemoTag />
+              communication.
             </p>
           </div>
         ) : null}
@@ -253,13 +252,11 @@ function Meta({
   label,
   value,
   mono,
-  demo,
   tone,
 }: {
   label: string;
   value: string;
   mono?: boolean;
-  demo?: boolean;
   tone?: "alert";
 }) {
   return (
@@ -273,7 +270,6 @@ function Meta({
         )}
       >
         {value}
-        {demo ? <DemoTag /> : null}
       </div>
     </div>
   );

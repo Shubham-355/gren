@@ -25,7 +25,12 @@ export function Toasts() {
 
   return (
     <div
-      className="pointer-events-none fixed bottom-[9.5rem] left-1/2 z-[60] flex w-[min(24rem,92vw)] -translate-x-1/2 flex-col gap-2 lg:bottom-24 lg:left-6 lg:translate-x-0"
+      // Top of the screen on a phone. The bottom eighty pixels there are
+      // already the tab bar, the copilot button and — on every flow screen —
+      // the sticky action bar, so a toast landing among them covered the very
+      // button that raised it. Desktop keeps the bottom-left corner, which is
+      // empty.
+      className="pointer-events-none fixed left-1/2 top-[4.75rem] z-[60] flex w-[min(24rem,92vw)] -translate-x-1/2 flex-col gap-2 lg:bottom-24 lg:left-6 lg:top-auto lg:translate-x-0"
       role="status"
       aria-live="polite"
     >

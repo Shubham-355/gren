@@ -8,7 +8,6 @@ import {
   Card,
   CardHeader,
   ComputedTag,
-  DemoTag,
   Field,
   MoneyInput,
   PageHeader,
@@ -147,7 +146,6 @@ export default function OtherSourcesPage() {
                       <div className="min-w-0">
                         <div className="text-[13.5px] font-medium">
                           {entry.description}
-                          <DemoTag />
                         </div>
                         <div className="text-[12px] text-ink-faint">
                           {entry.source}

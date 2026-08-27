@@ -8,7 +8,6 @@ import {
   Button,
   Callout,
   Card,
-  DemoTag,
   EmptyState,
   LinkButton,
   Term,
@@ -232,7 +231,6 @@ export default function ConfirmationPage() {
                   {state.filing.formSelected ?? "ITR-1"} · {state.regime} regime ·
                   AY {ASSESSMENT_YEAR}
                 </span>
-                <DemoTag label="synthetic" />
               </div>
             </div>
           </Card>

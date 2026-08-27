@@ -106,10 +106,12 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger" | "clay";
   size?: "sm" | "md" | "lg";
   block?: boolean;
+  /** Working, not unavailable — keeps its colour and shows a spinner. */
+  pending?: boolean;
 };
 
 const buttonBase =
-  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-sm)] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45";
+  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-sm)] font-medium transition-colors disabled:cursor-not-allowed";
 
 const buttonVariants = {
   primary:
@@ -137,20 +139,69 @@ export function Button({
   variant = "primary",
   size = "md",
   block,
+  pending,
+  disabled,
   className,
+  children,
   ...rest
 }: ButtonProps) {
   return (
     <button
       {...rest}
+      disabled={disabled || pending}
+      aria-busy={pending || undefined}
       className={cx(
         buttonBase,
         buttonVariants[variant],
         buttonSizes[size],
         block && "w-full",
+        // A button that is working is not a button that is unavailable, so it
+        // keeps its full colour while it waits. Dimming it to 45% reads as
+        // "you cannot do this", which is the opposite of what is happening.
+        pending ? "cursor-wait" : "disabled:opacity-45",
         className,
       )}
-    />
+    >
+      {pending ? <Spinner size={size === "lg" ? 18 : 16} /> : null}
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Shown only where a wait is real. The OTP check is simulated, but it is the
+ * one gesture in this app that stands in for a round trip, and it has to look
+ * like one.
+ *
+ * Under prefers-reduced-motion the spin is flattened to nothing by the global
+ * rule, so every caller pairs this with a word — "Verifying" — that carries
+ * the same message without moving.
+ */
+export function Spinner({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      className="shrink-0 animate-spin"
+      aria-hidden
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        stroke="currentColor"
+        strokeOpacity="0.3"
+        strokeWidth="2.75"
+      />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        stroke="currentColor"
+        strokeWidth="2.75"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
@@ -221,17 +272,6 @@ export function Badge({
 }
 
 /** The honesty marker required on every seeded or simulated figure. */
-export function DemoTag({ label = "demo data" }: { label?: string }) {
-  return (
-    <span
-      className="ml-1.5 inline-flex select-none items-center rounded-[var(--radius-pill)] border border-dashed border-[color:var(--clay)]/40 bg-clay-50 px-1.5 py-px align-middle text-[10px] font-medium uppercase tracking-wide text-[color:var(--clay-ink)]"
-      title="This figure is synthetic seed data, not a real record."
-    >
-      {label}
-    </span>
-  );
-}
-
 /** For numbers this app computed itself, as opposed to numbers it was handed. */
 export function ComputedTag() {
   return (

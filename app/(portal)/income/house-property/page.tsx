@@ -7,7 +7,6 @@ import {
   CardHeader,
   ChoiceGroup,
   ComputedTag,
-  DemoTag,
   Field,
   MoneyInput,
   PageHeader,
@@ -151,7 +150,7 @@ export default function HousePropertyPage() {
                   <span className="tnum">
                     {inr(housePropertySeed.homeLoanPrincipal)}
                   </span>{" "}
-                  <DemoTag /> — is a{" "}
+                  — is a{" "}
                   <Term name="Section 80C">80C</Term> deduction and lives on the
                   deductions screen.
                 </Callout>

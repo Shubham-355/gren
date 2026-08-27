@@ -93,14 +93,24 @@ export function AppShell({ children }: { children: ReactNode }) {
                 daysLeft={daysLeft}
               />
 
+              {/* Activity moved up here from the tab bar to free that slot for
+                  Saathi. It is a log you consult, not a place you go, so the
+                  header is the more honest home for it — and the count is the
+                  part that has to stay visible, which it does at every width. */}
               <button
                 onClick={() => setTimelineOpen(true)}
+                aria-label={
+                  changeCount > 0
+                    ? `Activity — ${changeCount} changes so far`
+                    : "Activity"
+                }
                 className={cx(
-                  "hidden items-center gap-1.5 text-[13.5px] font-medium text-ink-soft hover:text-ink sm:flex",
+                  "tap flex items-center gap-1.5 text-[13.5px] font-medium text-ink-soft hover:text-ink",
                   copilotOpen ? "min-[2100px]:hidden" : "min-[1700px]:hidden",
                 )}
               >
-                Activity
+                <IconActivity width={20} height={20} className="sm:hidden" />
+                <span className="hidden sm:inline">Activity</span>
                 {changeCount > 0 ? (
                   <span className="tnum rounded-full bg-sunk px-1.5 text-[11px] font-semibold text-ink-faint">
                     {changeCount}
@@ -151,10 +161,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           onClick={() => setCopilotOpen(!copilotOpen)}
           aria-label="Open Saathi, the AI assistant"
           className={cx(
-            "fixed bottom-[5.5rem] right-4 z-40 flex items-center gap-2.5 rounded-[var(--radius-pill)] bg-[color:var(--petrol)] py-3 pl-4 pr-5 text-white shadow-[0_10px_24px_-10px_rgba(15,95,114,0.7)] transition-all hover:bg-[color:var(--petrol-ink)]",
-            "lg:bottom-11 lg:right-0 lg:rounded-r-none lg:rounded-l-[var(--radius-sm)] lg:shadow-[-8px_8px_24px_-12px_rgba(15,95,114,0.6)]",
-            // At 2xl the timeline rail carries its own "Open copilot" footer,
-            // so a floating button on the same edge would just collide with it.
+            // Desktop only. It docks into the empty right gutter, which is
+            // room a phone does not have — there it floated over the page and
+            // landed squarely on the sticky action bar, covering the right end
+            // of the primary button on every flow screen. On a phone Saathi
+            // lives in the tab bar instead, where nothing can sit under it.
+            "fixed bottom-11 right-0 z-40 hidden items-center gap-2.5 rounded-l-[var(--radius-sm)] bg-[color:var(--petrol)] py-3 pl-4 pr-5 text-white shadow-[-8px_8px_24px_-12px_rgba(15,95,114,0.6)] transition-all hover:bg-[color:var(--petrol-ink)] lg:flex",
             // Above this the rail carries its own "Open copilot" footer, so a
             // floating button on the same edge would only collide with it.
             "min-[1700px]:hidden",
@@ -163,7 +175,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <CopilotStar size={20} />
           <span className="text-[14.5px] font-medium">Ask</span>
-          <span className="mono hidden rounded bg-white/15 px-1.5 py-0.5 text-[11px] text-white/70 lg:inline">
+          <span className="mono rounded bg-white/15 px-1.5 py-0.5 text-[11px] text-white/70">
             ⌘K
           </span>
         </button>
@@ -195,12 +207,19 @@ export function AppShell({ children }: { children: ReactNode }) {
               pathname={pathname}
               badge={pendingCount}
             />
+            {/* Saathi holds a permanent slot rather than floating over the
+                page. A labelled tab is also plainer than an unlabelled circle
+                was — it says what it is. */}
             <button
-              onClick={() => setTimelineOpen(true)}
-              className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium text-ink-faint"
+              onClick={() => setCopilotOpen(true)}
+              aria-label="Open Saathi, the AI assistant"
+              className={cx(
+                "flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium",
+                copilotOpen ? "text-[color:var(--petrol)]" : "text-ink-faint",
+              )}
             >
-              <IconActivity width={22} height={22} />
-              Activity
+              <CopilotStar size={22} />
+              Saathi
             </button>
             <button
               onClick={() => setMoreOpen(true)}
@@ -303,7 +322,6 @@ function MoreSheet({
   pathname: string;
 }) {
   const logout = useAppStore((s) => s.logout);
-  const resetDemo = useAppStore((s) => s.resetDemo);
   const router = useRouter();
 
   return (
@@ -350,17 +368,11 @@ function MoreSheet({
             </div>
           ))}
 
+          {/* Resetting the demo lives on the profile screen and only there.
+              Three copies of a button that throws away everything you have
+              entered is two too many, and none of them belong in reach of a
+              thumb that was aiming for "Sign out". */}
           <div className="flex gap-2.5 border-t border-line pt-5">
-            <button
-              onClick={() => {
-                resetDemo();
-                onClose();
-                router.push("/dashboard");
-              }}
-              className="flex-1 rounded-[var(--radius-sm)] border border-line-strong px-3 py-2.5 text-[13px] text-ink-soft hover:bg-sunk"
-            >
-              Reset demo data
-            </button>
             <button
               onClick={() => {
                 logout();

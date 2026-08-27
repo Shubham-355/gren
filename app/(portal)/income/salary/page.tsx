@@ -9,7 +9,6 @@ import {
   Button,
   Callout,
   Card,
-  DemoTag,
   LinkButton,
   Term,
   Toggle,
@@ -356,7 +355,6 @@ function ImportGate({ onManual }: { onManual: () => void }) {
             <div>
               <div className="text-[15px] font-semibold">
                 {form16.employer.name}
-                <DemoTag />
               </div>
               <div className="mono mt-0.5 text-[11.5px] text-ink-faint">
                 TAN {form16.employer.tan} · issued {shortDate(form16.issuedOn)}

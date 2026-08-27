@@ -154,20 +154,22 @@ function GuidedDiscovery({ onBrowse }: { onBrowse: () => void }) {
           </div>
         )}
 
-        <div className="mt-11 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-6">
+        {/* One per line on a phone. Wrapping a three-item row left the
+            separator stranded at the head of the second line. */}
+        <div className="mt-11 flex flex-col items-start gap-y-3 border-t border-line pt-6 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5 sm:gap-y-2">
           <span className="text-[13.5px] text-ink-faint">
             Rather not answer questions?
           </span>
           <button
             onClick={onBrowse}
-            className="border-b border-[color:var(--plum)] text-[13.5px] font-medium text-[color:var(--plum)]"
+            className="tap border-b border-[color:var(--plum)] text-[13.5px] font-medium text-[color:var(--plum)]"
           >
             Enter sections directly
           </button>
-          <span className="text-[13.5px] text-ink-faint">·</span>
+          <span className="hidden text-[13.5px] text-ink-faint sm:inline">·</span>
           <button
             onClick={() => setCopilotOpen(true)}
-            className="border-b border-[color:var(--petrol)] text-[13.5px] font-medium text-[color:var(--petrol)]"
+            className="tap border-b border-[color:var(--petrol)] text-[13.5px] font-medium text-[color:var(--petrol)]"
           >
             Tell Saathi in a sentence
           </button>

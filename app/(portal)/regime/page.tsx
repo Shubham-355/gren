@@ -343,14 +343,18 @@ function HeadCell({
           : "border-line border-l border-l-[color:var(--surface-sunk)]",
       )}
     >
+      {/* Two separate pills rather than "cheaper · chosen" in one. A single
+          pill did not fit a third of a phone's width and broke across two
+          lines mid-phrase; two short ones wrap cleanly under each other. */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[13.5px] font-semibold sm:text-[15px]">{title}</span>
         {winner ? (
-          <span className="rounded-full bg-[color:var(--ok)] px-2 py-[2px] text-[10.5px] font-semibold text-white sm:px-2.5 sm:py-[3px] sm:text-[11px]">
-            cheaper{chosen ? " · chosen" : ""}
+          <span className="whitespace-nowrap rounded-full bg-[color:var(--ok)] px-2 py-[2px] text-[10.5px] font-semibold text-white sm:px-2.5 sm:py-[3px] sm:text-[11px]">
+            cheaper
           </span>
-        ) : chosen ? (
-          <span className="rounded-full bg-plum-50 px-2 py-[2px] text-[10.5px] font-semibold text-[color:var(--plum)] sm:px-2.5 sm:py-[3px] sm:text-[11px]">
+        ) : null}
+        {chosen ? (
+          <span className="whitespace-nowrap rounded-full bg-plum-50 px-2 py-[2px] text-[10.5px] font-semibold text-[color:var(--plum)] sm:px-2.5 sm:py-[3px] sm:text-[11px]">
             chosen
           </span>
         ) : null}
