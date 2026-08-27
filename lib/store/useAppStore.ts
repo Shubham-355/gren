@@ -5,9 +5,9 @@ import { persist, createJSONStorage } from "zustand/middleware";
 
 import {
   aisEntries,
-  annualRentPaid,
   bankAccounts,
   deductionEvidence,
+  filingHistory,
   form16,
   grievanceTopics,
   grossSalaryFromForm16,
@@ -17,6 +17,7 @@ import {
   taxpayer,
   type AisEntry,
   type BankAccount,
+  type FilingRecord,
   type GrievanceTopicId,
   type Notice,
 } from "@/lib/data/seed";
@@ -218,6 +219,8 @@ export type AppState = {
   // --- session ---
   loggedIn: boolean;
   loginMethod: "pan" | "aadhaar" | null;
+  /** "demo" for the seeded taxpayer, "fresh" for any other PAN. */
+  accountKind: "demo" | "fresh";
 
   // --- profile ---
   profile: ProfileState;
@@ -265,7 +268,7 @@ export type AppState = {
   lastTouchedModule: string | null;
 
   // ================= actions =================
-  login: (method: "pan" | "aadhaar") => void;
+  login: (method: "pan" | "aadhaar", identifier?: string) => void;
   logout: () => void;
   resetDemo: () => void;
 
@@ -360,14 +363,19 @@ const OTHER_SOURCE_FIELD: Record<string, keyof OtherSourcesInput | undefined> = 
 };
 
 /**
- * The user starts having declared nothing beyond salary and the interest they
- * remembered. The gaps against AIS are what the reconciliation module exists
- * to surface.
+ * A new return declares nothing.
+ *
+ * What gets handed to you is the identity layer — name, PAN, Aadhaar, address,
+ * bank accounts — so nobody has to type personal details to see the product,
+ * and the documents the department already holds. Every figure that is
+ * actually a claim you are making starts at zero, because the work of a
+ * return is deciding what goes in it. Prefilling that left the whole flow
+ * looking finished before it began.
  */
 const initialOtherSources: OtherSourcesInput = {
-  savingsInterest: 14_850,
+  savingsInterest: 0,
   fdInterest: 0,
-  dividend: 6_000,
+  dividend: 0,
   other: 0,
 };
 
@@ -444,6 +452,16 @@ const initialState = {
   loggedIn: false,
   loginMethod: null,
 
+  /**
+   * Whose return this is.
+   *
+   * "demo" is the seeded taxpayer you get by signing in with the PAN the login
+   * screen prefills. Any other PAN is a "fresh" account: the documents the
+   * department would hold still arrive, but the seeded persona's filing
+   * history and notices do not, because they are not this taxpayer's.
+   */
+  accountKind: "demo" as "demo" | "fresh",
+
   profile: {
     name: taxpayer.name,
     pan: taxpayer.pan,
@@ -460,21 +478,24 @@ const initialState = {
 
   salary: emptySalary,
   form16Imported: false,
+  // Owning a property is a fact only the taxpayer can state, so the switch
+  // starts off. The seeded figures are still there behind it, offered on the
+  // house property screen the moment it is turned on.
   houseProperty: {
-    // The persona owns a let-out flat, so it starts declared. Turning it off
-    // on the house property screen is a real, supported choice.
-    enabled: housePropertySeed.enabled,
+    enabled: false,
     type: housePropertySeed.type,
-    annualRentReceived: housePropertySeed.annualRentReceived,
-    municipalTaxesPaid: housePropertySeed.municipalTaxesPaid,
-    homeLoanInterest: housePropertySeed.homeLoanInterest,
-    address: housePropertySeed.address,
-    tenantName: housePropertySeed.tenantName,
+    annualRentReceived: 0,
+    municipalTaxesPaid: 0,
+    homeLoanInterest: 0,
+    address: "",
+    tenantName: "",
   },
   otherSources: initialOtherSources,
+  // Same for rent: claiming HRA is a claim, and it needs a rent figure the
+  // taxpayer supplies. The metro flag follows the address we do know.
   hra: {
-    claiming: true,
-    rentPaidAnnual: annualRentPaid,
+    claiming: false,
+    rentPaidAnnual: 0,
     metroCity: rentDetails.metroCity,
   } as HraInput,
 
@@ -523,8 +544,26 @@ export const useAppStore = create<AppState>()(
       ...initialState,
 
       // ---------------- session ----------------
-      login: (method) => {
-        set({ loggedIn: true, loginMethod: method });
+      login: (method, identifier) => {
+        const typed = (identifier ?? "").trim().toUpperCase().replace(/\s/g, "");
+        const isDemo =
+          typed.length === 0 ||
+          (method === "pan"
+            ? typed === taxpayer.pan
+            : typed === taxpayer.aadhaarMasked.replace(/\s/g, ""));
+
+        set((s) => ({
+          loggedIn: true,
+          loginMethod: method,
+          accountKind: isDemo ? "demo" : "fresh",
+          profile:
+            isDemo || method !== "pan"
+              ? s.profile
+              : { ...s.profile, pan: typed },
+          // A fresh PAN has no past returns and no open notices against it.
+          notices: isDemo ? s.notices : {},
+        }));
+
         get().logAction({
           actor: "you",
           tool: "login",
@@ -1163,6 +1202,7 @@ export const useAppStore = create<AppState>()(
       partialize: (s) => ({
         loggedIn: s.loggedIn,
         loginMethod: s.loginMethod,
+        accountKind: s.accountKind,
         profile: s.profile,
         salary: s.salary,
         form16Imported: s.form16Imported,
@@ -1344,6 +1384,20 @@ export function aisStatus(s: AppState, entry: AisEntry): AisStatus {
 /** Only the entries genuinely asking the taxpayer for a decision. */
 export function pendingMismatches(s: AppState): AisEntry[] {
   return aisEntries.filter((e) => aisStatus(s, e) === "open");
+}
+
+/**
+ * The seeded persona's past returns and departmental notices. They belong to
+ * that taxpayer, not to whatever PAN was typed at sign-in, so a fresh account
+ * sees neither — the documents it does get (Form 16, AIS, 26AS) are the ones a
+ * real portal would fetch for any PAN.
+ */
+export function visibleFilingHistory(s: AppState): FilingRecord[] {
+  return s.accountKind === "fresh" ? [] : filingHistory;
+}
+
+export function visibleNotices(s: AppState): Notice[] {
+  return s.accountKind === "fresh" ? [] : seededNotices;
 }
 
 export function refundStage(s: AppState): RefundStage {

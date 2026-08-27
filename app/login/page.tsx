@@ -92,7 +92,9 @@ export default function LoginPage() {
     setError(null);
     setVerifying(true);
     verifyTimer.current = window.setTimeout(() => {
-      login(method);
+      // The identifier decides whose return this is: the prefilled PAN opens
+      // the seeded taxpayer, anything else starts a fresh one.
+      login(method, identifier);
       router.push("/dashboard");
     }, 2000);
   }

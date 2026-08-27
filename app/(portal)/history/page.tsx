@@ -13,10 +13,10 @@ import {
   Stat,
   cx,
 } from "@/components/ui";
-import { filingHistory, type FilingRecord } from "@/lib/data/seed";
+import { type FilingRecord } from "@/lib/data/seed";
 import { inr, pct, shortDate } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
-import { useAppStore } from "@/lib/store/useAppStore";
+import { useAppStore, visibleFilingHistory } from "@/lib/store/useAppStore";
 import { ASSESSMENT_YEAR } from "@/lib/tax/constants";
 
 export default function HistoryPage() {
@@ -39,6 +39,7 @@ export default function HistoryPage() {
       }
     : null;
 
+  const filingHistory = visibleFilingHistory(state);
   const all = thisYear ? [thisYear, ...filingHistory] : filingHistory;
   const previous = filingHistory[0];
 
@@ -51,6 +52,10 @@ export default function HistoryPage() {
       />
 
       {/* --------- year on year --------- */}
+      {/* Needs a previous year to be against. A PAN filing here for the
+          first time has none, so the comparison is simply absent rather
+          than a card full of dashes. */}
+      {previous ? (
       <Card tone="accent">
         <CardHeader
           title="This year against last"
@@ -90,6 +95,7 @@ export default function HistoryPage() {
           </p>
         </div>
       </Card>
+      ) : null}
 
       {/* --------- the list --------- */}
       <div className="space-y-3">

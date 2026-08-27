@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import { Card, LinkButton, cx } from "@/components/ui";
-import { notices as seededNotices } from "@/lib/data/seed";
 import { FLOW_STEPS, nextStep, stepDone } from "@/lib/flow";
 import { inr } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
-import { pendingMismatches, useAppStore } from "@/lib/store/useAppStore";
+import {
+  pendingMismatches,
+  useAppStore,
+  visibleNotices,
+} from "@/lib/store/useAppStore";
 
 /**
  * Step 2 — Home dashboard.
@@ -23,7 +26,7 @@ export default function DashboardPage() {
   const pending = pendingMismatches(state);
   const next = nextStep(state);
 
-  const openNotice = seededNotices.find(
+  const openNotice = visibleNotices(state).find(
     (n) => state.notices[n.id]?.status === "Open" && n.requiresResponse,
   );
 

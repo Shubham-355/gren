@@ -16,10 +16,14 @@ import {
   cx,
 } from "@/components/ui";
 import { refundStageMeaning } from "@/lib/copilot/context";
-import { filingHistory } from "@/lib/data/seed";
 import { inr, shortDate } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
-import { refundStage, useAppStore, type RefundStage } from "@/lib/store/useAppStore";
+import {
+  refundStage,
+  useAppStore,
+  visibleFilingHistory,
+  type RefundStage,
+} from "@/lib/store/useAppStore";
 
 const stages: { id: RefundStage; label: string; plain: string }[] = [
   {
@@ -247,6 +251,9 @@ export default function RefundPage() {
       </Card>
 
       {/* ---------------- past refunds ---------------- */}
+      {/* Only where there are any. An empty "Past refunds" card tells a
+          first-time filer nothing except that the app expected more. */}
+      {visibleFilingHistory(state).length > 0 ? (
       <Card>
         <CardHeader
           title="Past refunds"
@@ -261,7 +268,7 @@ export default function RefundPage() {
           }
         />
         <ul className="divide-y divide-[color:var(--line)]">
-          {filingHistory.map((f) => (
+          {visibleFilingHistory(state).map((f) => (
             <li
               key={f.assessmentYear}
               className="flex items-center justify-between gap-3 px-4 py-3"
@@ -288,6 +295,7 @@ export default function RefundPage() {
           ))}
         </ul>
       </Card>
+      ) : null}
 
       <Callout tone="warn" title="If it stops moving" collapsible>
         The usual causes are an unvalidated bank account, a name mismatch between

@@ -11,12 +11,12 @@ import {
   Term,
   cx,
 } from "@/components/ui";
-import { notices } from "@/lib/data/seed";
 import { daysUntil, shortDate } from "@/lib/format";
-import { useAppStore } from "@/lib/store/useAppStore";
+import { useAppStore, visibleNotices } from "@/lib/store/useAppStore";
 
 export default function NoticesPage() {
   const state = useAppStore();
+  const notices = visibleNotices(state);
 
   const open = notices.filter(
     (n) => state.notices[n.id]?.status === "Open" && n.requiresResponse,
