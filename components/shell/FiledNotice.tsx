@@ -28,7 +28,10 @@ export function FiledNotice() {
     return null;
 
   return (
-    <div className="mb-6 flex flex-wrap items-start gap-x-3 gap-y-2 rounded-[var(--radius)] border border-warn-100 bg-warn-50 px-4 py-3.5">
+    // Stacked on a phone: wrapping put the heading in a narrow left column and
+    // squeezed the sentence into what was left, which read as two columns of
+    // rubble rather than a notice.
+    <div className="mb-6 flex flex-col gap-1.5 rounded-[var(--radius)] border border-warn-100 bg-warn-50 px-4 py-3.5 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-3 sm:gap-y-2">
       <span className="text-[14px] font-semibold text-[color:var(--warn)]">
         This return is already filed
       </span>

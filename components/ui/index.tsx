@@ -267,8 +267,10 @@ export function Stat({
   } as const;
   return (
     <div className="min-w-0">
-      <div className="eyebrow flex items-center">
-        <span className="truncate">{label}</span>
+      {/* Wrap, do not truncate. In a two-column grid on a phone these labels
+          became "REFUND …" and "ACKNOWLE…", which is worse than two lines. */}
+      <div className="eyebrow flex flex-wrap items-start gap-x-1.5">
+        <span className="leading-snug">{label}</span>
         {tag}
       </div>
       <div

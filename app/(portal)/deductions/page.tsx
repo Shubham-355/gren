@@ -100,7 +100,7 @@ function GuidedDiscovery({ onBrowse }: { onBrowse: () => void }) {
   const shelter = useMemo(() => shelterFigures(state), [state]);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_360px] lg:gap-10">
+    <div className="grid gap-8 lg:grid-cols-[1fr_360px] lg:gap-10 [&>*]:min-w-0">
       {/* --------------------------- the question --------------------------- */}
       <div>
         {question ? (
@@ -326,22 +326,21 @@ function QuestionBody({
       ) : (
         <div className="mt-8 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
           {question.suggested > 0 ? (
+            // min-h, not h: the label plus its annotations wrap to three lines
+            // on a phone, and a fixed height pushed the text clean out of the
+            // button.
             <button
               onClick={() => record(question.suggested)}
-              className="flex h-[56px] items-center justify-between gap-3.5 rounded-[var(--radius-sm)] bg-[color:var(--plum)] px-[26px] text-[16.5px] font-medium text-white transition-colors hover:bg-[color:var(--plum-deep)] sm:justify-start"
+              className="flex min-h-[56px] w-full flex-col items-start justify-center gap-0.5 rounded-[var(--radius-sm)] bg-[color:var(--plum)] px-[22px] py-3 text-left text-[16.5px] font-medium text-white transition-colors hover:bg-[color:var(--plum-deep)] sm:w-auto sm:flex-row sm:items-center sm:gap-3.5 sm:px-[26px]"
             >
-              <span>
-                Yes — {inr(question.suggested)}
-                {capped ? (
-                  <span className="ml-2 text-[13.5px] font-normal text-white/[0.72]">
-                    counts as {inr(question.ceiling!)}
-                  </span>
-                ) : null}
-              </span>
-              {preview > 0 ? (
-                <span className="tnum text-[14px] text-white/[0.72]">
-                  saves {inr(preview)}
-                  {regime === "new" ? " on the old regime" : ""}
+              <span>Yes — {inr(question.suggested)}</span>
+              {capped || preview > 0 ? (
+                <span className="tnum text-[13.5px] font-normal leading-snug text-white/[0.72]">
+                  {capped ? `counts as ${inr(question.ceiling!)}` : null}
+                  {capped && preview > 0 ? " · " : null}
+                  {preview > 0
+                    ? `saves ${inr(preview)}${regime === "new" ? " on the old regime" : ""}`
+                    : null}
                 </span>
               ) : null}
             </button>
@@ -352,7 +351,7 @@ function QuestionBody({
               setAnswering(true);
             }}
             className={cx(
-              "flex h-[56px] items-center justify-center rounded-[var(--radius-sm)] px-6 text-[16.5px] font-medium transition-colors",
+              "flex h-[56px] w-full items-center justify-center rounded-[var(--radius-sm)] px-6 text-[16.5px] font-medium transition-colors sm:w-auto",
               question.suggested > 0
                 ? "border border-line-strong bg-surface hover:bg-sunk"
                 : "bg-[color:var(--plum)] text-white hover:bg-[color:var(--plum-deep)]",
@@ -365,7 +364,7 @@ function QuestionBody({
               state.setDeduction(question.section, 0);
               state.markDiscoveryAnswered(question.id);
             }}
-            className="flex h-[56px] items-center justify-center rounded-[var(--radius-sm)] border border-line-strong bg-surface px-6 text-[16.5px] font-medium text-ink-soft transition-colors hover:bg-sunk"
+            className="flex h-[56px] w-full items-center justify-center rounded-[var(--radius-sm)] border border-line-strong bg-surface px-6 text-[16.5px] font-medium text-ink-soft transition-colors hover:bg-sunk sm:w-auto"
           >
             No
           </button>
@@ -465,7 +464,7 @@ function SectionList({ onGuided }: { onGuided: () => void }) {
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
+      <div className="grid gap-5 lg:grid-cols-[1fr_20rem] [&>*]:min-w-0">
         <div className="space-y-4">
           <Card>
             <div className="divide-y divide-[color:var(--line)]">

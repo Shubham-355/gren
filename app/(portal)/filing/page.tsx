@@ -108,7 +108,7 @@ export default function FilingPage() {
     <div>
       <PhoneStepHeader back={{ href: "/regime" }} />
 
-      <div className="grid gap-7 lg:grid-cols-[1fr_360px] lg:gap-9">
+      <div className="grid gap-7 lg:grid-cols-[1fr_360px] lg:gap-9 [&>*]:min-w-0">
         <div>
           <h1 className="font-display text-[34px] leading-[1.08] tracking-[-0.015em] sm:text-[52px] sm:leading-[1.04]">
             Everything, once more
@@ -428,7 +428,10 @@ export default function FilingPage() {
               </span>
             </button>
 
-            <div className="mt-4">
+            {/* On a phone the sticky bar at the foot of the screen carries this
+                action, so repeating it inside the card gave two identical
+                primary buttons a thumb's width apart. */}
+            <div className="mt-4 hidden lg:block">
               <Button
                 block
                 size="lg"
@@ -446,7 +449,7 @@ export default function FilingPage() {
                 Go to payment
               </Link>
             ) : (
-              <p className="mt-3 text-center text-[12px] text-ink-faint">
+              <p className="mt-3 hidden text-center text-[12px] text-ink-faint lg:block">
                 One more tap on the review card after this. Nothing is
                 transmitted to any tax authority.
               </p>
@@ -486,9 +489,7 @@ export default function FilingPage() {
       </div>
 
       <div className="lg:hidden">
-        <FlowActionBar
-          note="You will still need to e-verify within 30 days."
-        >
+        <FlowActionBar note="One more tap on the review card after this. You will still need to e-verify within 30 days.">
           <Button
             block
             size="lg"

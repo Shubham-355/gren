@@ -62,8 +62,8 @@ export default function RegimePage() {
       </p>
 
       {/* --------------------------- the comparison --------------------------- */}
-      <Card className="scroll-x mt-6 overflow-hidden">
-        <div className="grid min-w-[34rem] grid-cols-[1.5fr_1fr_1fr]">
+      <Card className="mt-6 overflow-hidden">
+        <div className="grid grid-cols-[1.35fr_1fr_1fr] sm:grid-cols-[1.5fr_1fr_1fr]">
           <HeadCell />
           <HeadCell
             title="New regime"
@@ -177,7 +177,12 @@ export default function RegimePage() {
           />
 
           <CompareRow
-            label={`${comparison.new.refundDue > 0 || comparison.old.refundDue > 0 ? "Refund" : "Balance payable"} after the ${inr(current.tdsCredit)} already paid`}
+            label={
+              comparison.new.refundDue > 0 || comparison.old.refundDue > 0
+                ? "Refund"
+                : "Balance payable"
+            }
+            sub={`after the ${inr(current.tdsCredit)} already paid`}
             newValue={inr(
               comparison.new.refundDue > 0
                 ? comparison.new.refundDue
@@ -327,31 +332,33 @@ function HeadCell({
   chosen?: boolean;
 }) {
   if (!title) {
-    return <div className="border-b border-line px-5 py-4" />;
+    return <div className="border-b border-line px-3 py-3.5 sm:px-5 sm:py-4" />;
   }
   return (
     <div
       className={cx(
-        "border-b px-5 py-4",
+        "border-b px-3 py-3.5 sm:px-5 sm:py-4",
         winner
           ? "border-ok-100 bg-ok-50"
           : "border-line border-l border-l-[color:var(--surface-sunk)]",
       )}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[15px] font-semibold">{title}</span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[13.5px] font-semibold sm:text-[15px]">{title}</span>
         {winner ? (
-          <span className="rounded-full bg-[color:var(--ok)] px-2.5 py-[3px] text-[11px] font-semibold text-white">
+          <span className="rounded-full bg-[color:var(--ok)] px-2 py-[2px] text-[10.5px] font-semibold text-white sm:px-2.5 sm:py-[3px] sm:text-[11px]">
             cheaper{chosen ? " · chosen" : ""}
           </span>
         ) : chosen ? (
-          <span className="rounded-full bg-plum-50 px-2.5 py-[3px] text-[11px] font-semibold text-[color:var(--plum)]">
+          <span className="rounded-full bg-plum-50 px-2 py-[2px] text-[10.5px] font-semibold text-[color:var(--plum)] sm:px-2.5 sm:py-[3px] sm:text-[11px]">
             chosen
           </span>
         ) : null}
       </div>
       {sub ? (
-        <div className="mt-0.5 text-[12.5px] text-ink-faint">{sub}</div>
+        <div className="mt-0.5 hidden text-[12.5px] text-ink-faint sm:block">
+          {sub}
+        </div>
       ) : null}
     </div>
   );
@@ -379,9 +386,11 @@ function CompareRow({
   emphasiseWinner?: boolean;
 }) {
   const cell =
-    "px-5 text-right text-[14px] tnum " + (last ? "pb-[18px] pt-3" : "py-3");
+    "tnum px-2.5 text-right text-[12.5px] sm:px-5 sm:text-[14px] " +
+    (last ? "pb-[18px] pt-3" : "py-3");
   const labelCell =
-    "px-5 text-[14px] " + (last ? "pb-[18px] pt-3" : "py-3");
+    "px-3 text-[12.5px] sm:px-5 sm:text-[14px] " +
+    (last ? "pb-[18px] pt-3" : "py-3");
 
   return (
     <>
@@ -395,7 +404,9 @@ function CompareRow({
       >
         {label}
         {sub ? (
-          <span className="ml-1.5 text-[12.5px] text-ink-faint">{sub}</span>
+          <span className="ml-1.5 hidden text-[12.5px] text-ink-faint sm:inline">
+            {sub}
+          </span>
         ) : null}
       </div>
       <div
@@ -435,18 +446,18 @@ function TotalRow({
 }) {
   return (
     <>
-      <div className="border-t border-line px-5 py-4 text-[15px] font-semibold">
+      <div className="border-t border-line px-3 py-4 text-[13.5px] font-semibold sm:px-5 sm:text-[15px]">
         Total tax
       </div>
       <div
         className={cx(
-          "border-l border-t border-line px-5 py-4 text-right",
+          "border-l border-t border-line px-2.5 py-4 text-right sm:px-5",
           winner === "new" && "bg-ok-50",
         )}
       >
         <span
           className={cx(
-            "tnum font-display text-[28px] sm:text-[30px]",
+            "tnum font-display text-[19px] sm:text-[30px]",
             winner === "new" && "text-[color:var(--ok)]",
           )}
         >
@@ -455,13 +466,13 @@ function TotalRow({
       </div>
       <div
         className={cx(
-          "border-l border-t px-5 py-4 text-right",
+          "border-l border-t px-2.5 py-4 text-right sm:px-5",
           winner === "old" ? "border-ok-100 bg-ok-50" : "border-line",
         )}
       >
         <span
           className={cx(
-            "tnum font-display text-[28px] sm:text-[30px]",
+            "tnum font-display text-[19px] sm:text-[30px]",
             winner === "old" && "text-[color:var(--ok)]",
           )}
         >

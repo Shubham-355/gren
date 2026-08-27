@@ -97,7 +97,7 @@ export default function ProfilePage() {
         </ul>
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
         {/* ---------------- personal ---------------- */}
         <Card>
           <CardHeader

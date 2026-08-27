@@ -90,7 +90,7 @@ export default function DashboardPage() {
         </p>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:gap-9">
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:gap-9 [&>*]:min-w-0">
         <div className="space-y-7">
           {/* ------------------------- the one next action ------------------- */}
           <Card tone="plum" className="p-6 lg:p-7">

@@ -68,7 +68,7 @@ export default function SalaryPage() {
     <div>
       <PhoneStepHeader back={{ href: "/dashboard" }} />
 
-      <div className="grid gap-9 lg:grid-cols-[1fr_20rem] lg:gap-10">
+      <div className="grid gap-9 lg:grid-cols-[1fr_20rem] lg:gap-10 [&>*]:min-w-0">
         <div>
           <h1 className="font-display text-[32px] leading-[1.1] tracking-[-0.01em] sm:text-[46px] sm:leading-[1.05]">
             Here is what your employer already told them

@@ -123,7 +123,7 @@ export default function ReconciliationPage() {
       <div>
         <PhoneStepHeader back={{ href: "/income/salary" }} />
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:gap-9">
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:gap-9 [&>*]:min-w-0">
           <div className="space-y-4">
             <Card tone="ok" className="p-6">
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[color:var(--ok)] text-white">
@@ -257,7 +257,7 @@ export default function ReconciliationPage() {
     <div>
       <PhoneStepHeader back={{ href: "/income/salary" }} />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:gap-9">
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:gap-9 [&>*]:min-w-0">
         <div>
           <h1 className="font-display text-[32px] leading-[1.1] tracking-[-0.01em] sm:text-[44px] sm:leading-[1.05]">
             {pending.length === 1
@@ -485,17 +485,27 @@ function MismatchCard({ entry }: { entry: AisEntry }) {
           </div>
         </div>
       ) : (
-        <div className="mt-4 flex flex-wrap gap-2.5">
-          <Button onClick={() => resolveMismatch(entry.id, "accepted")}>
+        // Full width on a phone: buttons sized to their own labels stack
+        // ragged and give a smaller target than the thumb wants.
+        <div className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
+          <Button
+            className="w-full sm:w-auto"
+            onClick={() => resolveMismatch(entry.id, "accepted")}
+          >
             {acceptLabel(entry, gap)}
           </Button>
           {isAction ? (
-            <Button variant="secondary" onClick={() => setCorrecting(true)}>
+            <Button
+              variant="secondary"
+              className="w-full sm:w-auto"
+              onClick={() => setCorrecting(true)}
+            >
               A different amount is right
             </Button>
           ) : null}
           <Button
             variant="secondary"
+            className="w-full sm:w-auto"
             onClick={() => resolveMismatch(entry.id, "other-pan")}
           >
             {isAction ? "Not mine" : "It belongs to the first holder"}

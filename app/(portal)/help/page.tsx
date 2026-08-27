@@ -122,7 +122,7 @@ export default function HelpPage() {
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
         <Card tone="ok">
           <CardHeader title="Genuinely real" eyebrow="Actual working software" />
           <ul className="space-y-2.5 px-4 py-4">

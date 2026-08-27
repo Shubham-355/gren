@@ -138,7 +138,7 @@ export default function ConfirmationPage() {
 
       {/* ------------------------------ the rest ----------------------------- */}
       <div className="px-5 py-8 lg:px-10">
-        <div className="mx-auto grid max-w-6xl items-start gap-6 lg:grid-cols-[1fr_1fr_320px]">
+        <div className="mx-auto grid max-w-6xl items-start gap-6 lg:grid-cols-[1fr_1fr_320px] [&>*]:min-w-0">
           {/* ------------------------ what happens next ------------------- */}
           <Card className="p-5 sm:p-[22px]">
             <div className="eyebrow">What happens next</div>

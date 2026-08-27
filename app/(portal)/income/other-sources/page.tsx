@@ -65,7 +65,7 @@ export default function OtherSourcesPage() {
         </Callout>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
+      <div className="grid gap-5 lg:grid-cols-[1fr_20rem] [&>*]:min-w-0">
         <div className="space-y-5">
           <Card>
             <CardHeader
