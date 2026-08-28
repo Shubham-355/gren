@@ -5,7 +5,6 @@ import {
   discoveryQuestionsFor,
 } from "@/lib/data/discovery";
 import {
-  aisEntries,
   form16,
   grossSalaryFromForm16,
   notices as seededNotices,
@@ -16,12 +15,18 @@ import {
   advanceTaxCumulative,
   advanceTaxInstalments,
   declaredFor,
+  hasSeededDocuments,
   pendingMismatches,
   refundStage,
+  visibleAisEntries,
   toTaxpayerInput,
   type AppState,
 } from "@/lib/store/useAppStore";
-import { compareRegimes, computeTax } from "@/lib/tax/compute";
+import {
+  compareRegimes,
+  computeTax,
+  oldRegimeAvailable,
+} from "@/lib/tax/compute";
 import {
   ASSESSMENT_YEAR,
   FILING_DEADLINE,
@@ -62,9 +67,25 @@ export function buildScreenContext(state: AppState, pathname: string) {
   return {
     disclaimer:
       "Independent hackathon prototype. All taxpayer data is synthetic. Not affiliated with the Income Tax Department.",
+    /**
+     * Whether anything is on record for this PAN. On a fresh account there is
+     * no Form 16, no AIS and no 26AS — import_form16 and resolve_mismatch have
+     * nothing to act on, and the return has to be built by asking.
+     */
+    account: {
+      documentsOnRecord: hasSeededDocuments(state),
+      howToBuildTheReturn: hasSeededDocuments(state)
+        ? "Documents are on record. Import them and settle what they disagree with."
+        : "Nothing is on record. Ask the taxpayer for each figure in plain language, one question at a time, and record their answers with set_income and add_deduction. Never fill in a number they have not given you, and never claim to have imported anything.",
+    },
     assessmentYear: ASSESSMENT_YEAR,
     financialYear: FINANCIAL_YEAR,
     filingDeadline: FILING_DEADLINE,
+    /**
+     * Whether the old regime is still an option at all. False past the due
+     * date, and switch_regime will refuse — so the model must not offer it.
+     */
+    oldRegimeStillAvailable: oldRegimeAvailable(),
     today: new Date().toISOString().slice(0, 10),
 
     currentScreen: {
@@ -142,6 +163,7 @@ export function buildScreenContext(state: AppState, pathname: string) {
       questions: discoveryQuestionsFor(
         state.profile.age,
         state.otherSources,
+        hasSeededDocuments(state),
       ).map((q) => ({
         id: q.id,
         asks: q.question,
@@ -196,7 +218,7 @@ export function buildScreenContext(state: AppState, pathname: string) {
     },
 
     reconciliation: {
-      totalEntries: aisEntries.length,
+      totalEntries: visibleAisEntries(state).length,
       pendingCount: pending.length,
       pendingItems: pending.map((e) => ({
         id: e.id,
@@ -256,7 +278,7 @@ export function buildScreenContext(state: AppState, pathname: string) {
  * takes the human section name. This is the bridge, so the copilot is told the
  * exact argument to pass rather than being left to guess it.
  */
-const SECTION_ARGUMENTS: Record<string, string> = {
+export const SECTION_ARGUMENTS: Record<string, string> = {
   s80C: "80C",
   s80CCD1B: "80CCD(1B)",
   s80D_self: "80D_self",

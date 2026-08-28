@@ -14,6 +14,7 @@ import {
 } from "@/lib/flow";
 import { useAppStore } from "@/lib/store/useAppStore";
 import { SHELL_CONTAINER } from "./layout";
+import { useTouchedStep } from "./useTouchedStep";
 
 /**
  * The lightweight persistent step indicator (§4). Desktop gets the full
@@ -29,6 +30,7 @@ export function StepRail() {
     useShallow((s) => FLOW_STEPS.map((f) => stepDone(f.id, s))),
   );
   const here = stepForPath(pathname);
+  const touched = useTouchedStep();
 
   // Secondary modules (notices, help, grievance) are a deliberately entered
   // mode, not a step — the rail stays but nothing is marked current.
@@ -41,6 +43,7 @@ export function StepRail() {
             step={step}
             done={done[i]}
             current={here?.id === step.id}
+            touched={touched === step.id}
           />
         ))}
       </div>
@@ -52,10 +55,13 @@ function StepPip({
   step,
   done,
   current,
+  touched,
 }: {
   step: FlowStep;
   done: boolean;
   current: boolean;
+  /** something just changed this step — pulse it, wherever the user is */
+  touched: boolean;
 }) {
   const lit = done || current;
   return (
@@ -63,10 +69,11 @@ function StepPip({
       href={step.href}
       aria-current={current ? "step" : undefined}
       className={cx(
-        "flex shrink-0 items-center gap-2 whitespace-nowrap text-[12.5px] transition-colors",
+        "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[12.5px] transition-colors",
         lit
           ? "font-semibold text-[color:var(--plum)]"
           : "text-ink-faint hover:text-ink-soft",
+        touched && "animate-settle",
       )}
     >
       <span
@@ -104,6 +111,7 @@ export function PhoneStepHeader({
   const done = useAppStore(
     useShallow((s) => PHONE_STEPS.map((f) => stepDone(f.id, s))),
   );
+  const touched = useTouchedStep();
 
   if (!here) return null;
   const index = PHONE_STEPS.findIndex((s) => s.id === here.id);
@@ -146,6 +154,7 @@ export function PhoneStepHeader({
               done[i] || i <= index
                 ? "bg-[color:var(--plum)]"
                 : "bg-[color:var(--line)]",
+              touched === s.id && "animate-touched",
             )}
           />
         ))}

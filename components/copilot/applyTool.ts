@@ -22,12 +22,18 @@ import {
   readIncomeField,
   refundStage,
   toTaxpayerInput,
+  hasSeededDocuments,
   useAppStore,
   type IncomeField,
   type MismatchResolution,
 } from "@/lib/store/useAppStore";
 import type { DeductionInput } from "@/lib/tax/compute";
-import { compareRegimes, computeTax } from "@/lib/tax/compute";
+import {
+  compareRegimes,
+  computeTax,
+  oldRegimeAvailable,
+} from "@/lib/tax/compute";
+import { FILING_DEADLINE } from "@/lib/tax/constants";
 import { slug } from "@/components/ui";
 
 const SECTION_MAP: Record<string, keyof DeductionInput> = {
@@ -133,17 +139,46 @@ function journeyHint(): Record<string, unknown> {
 
   switch (step.id) {
     case "income":
-      return keepGoing("Call import_form16 — the return has no income in it yet.");
+      // With documents on record this is one call. Without them it is an
+      // interview, and the model has to be told that explicitly or it will
+      // keep reaching for import_form16 and reporting a failure.
+      return hasSeededDocuments(state)
+        ? keepGoing("Call import_form16 — the return has no income in it yet.")
+        : {
+            nextStep: {
+              step: step.id,
+              whatToDoNext:
+                "There is no Form 16 or AIS on record for this PAN, so nothing can be imported. Ask the taxpayer for their figures instead and record each answer with set_income. Start with basic salary, HRA received and the tax already deducted by the employer; then interest, dividends and rent paid. One question per message, in plain language, and never invent a figure they have not given you.",
+              instruction:
+                "Ask the first question now and wait for the answer. Do not call import_form16.",
+            },
+          };
     case "reconcile":
+      if (pendingIds.length === 0) {
+        return keepGoing(
+          "There is nothing to reconcile — no AIS entries are on record for this PAN. Move on to the deductions.",
+        );
+      }
       return keepGoing(
         `Call resolve_mismatch for each of these still-open ids: ${pendingIds.join(", ")}. Use resolution "accept" where the reported figure is genuinely the taxpayer's, and "belongs_to_other_pan" for the joint account they are only the second holder of.`,
       );
     case "deductions":
-      return keepGoing(
-        `Answer the remaining deduction questions with add_deduction: ${unanswered
-          .map((q) => `${q.sectionLabel} (₹${q.suggested} on record)`)
-          .join("; ")}. Pass 0 for any the taxpayer has nothing under.`,
-      );
+      return hasSeededDocuments(state)
+        ? keepGoing(
+            `Answer the remaining deduction questions with add_deduction: ${unanswered
+              .map((q) => `${q.sectionLabel} (₹${q.suggested} on record)`)
+              .join("; ")}. Pass 0 for any the taxpayer has nothing under.`,
+          )
+        : {
+            nextStep: {
+              step: step.id,
+              whatToDoNext: `Nothing is on record for this PAN, so these have to be asked. Still to ask: ${unanswered
+                .map((q) => `${q.sectionLabel} — "${q.question}"`)
+                .join("; ")}. Ask them in the taxpayer's own terms, one at a time, and record each answer with add_deduction — including 0 for a no, which is how the question gets marked answered.`,
+              instruction:
+                "Ask the first outstanding question now and wait for the answer. Do not guess amounts.",
+            },
+          };
     case "regime": {
       // Which regime is cheaper is arithmetic, not judgement. Handing the model
       // the answer and the exact call to make stops it leaving the taxpayer on
@@ -227,6 +262,21 @@ function runTool(
             noChange: true,
             regime,
             totalTaxLiability: before,
+          },
+        };
+      }
+      // The store refuses this after the due date. Silently doing nothing
+      // would leave the model telling the user it had switched them, so the
+      // refusal is returned as a structured error it has to act on.
+      if (regime === "old" && !oldRegimeAvailable()) {
+        return {
+          name: call.name,
+          ok: false,
+          summary: "The old regime can no longer be chosen",
+          result: {
+            ok: false,
+            error: `The due date of ${FILING_DEADLINE} has passed. Under section 115BAC(6) the old regime can only be opted into on a return filed by then, so this return is locked to the new regime. Tell the user plainly; do not retry.`,
+            regime: store.regime,
           },
         };
       }
@@ -499,6 +549,18 @@ function runTool(
 
     /* ---------------------------------------------------------- */
     case "import_form16": {
+      if (!hasSeededDocuments(store)) {
+        return {
+          name: call.name,
+          ok: false,
+          summary: "No Form 16 is on record for this PAN",
+          result: {
+            ok: false,
+            error:
+              "Nothing has been filed against this PAN, so there is no Form 16, AIS or 26AS to pull. Do not retry. Ask the taxpayer for their salary figures instead and record each with set_income — basic salary, HRA received and the tax the employer deducted are the three to start with.",
+          },
+        };
+      }
       if (store.form16Imported) {
         return {
           name: call.name,

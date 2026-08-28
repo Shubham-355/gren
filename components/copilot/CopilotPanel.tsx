@@ -7,6 +7,9 @@ import { useShallow } from "zustand/react/shallow";
 import { CopilotStar } from "@/components/shell/AppShell";
 import { cx } from "@/components/ui";
 import { buildScreenContext, summariseContext } from "@/lib/copilot/context";
+import { respondLocally } from "@/lib/copilot/fallback";
+import { FLOW_STEPS, stepDone } from "@/lib/flow";
+import { inr } from "@/lib/format";
 import type { ToolCall, ToolOutcome } from "@/lib/copilot/tools";
 import { discoveryQuestions } from "@/lib/data/discovery";
 import {
@@ -196,26 +199,60 @@ export function CopilotPanel() {
         pending: true,
       });
 
+      // What the offline responder needs to read a vague sentence: the screen
+      // it was typed on, and the message before it so "yes, do it" resolves.
+      const localContext = {
+        module: moduleKeyOf(pathname),
+        previousMessage: [...useAppStore.getState().copilotMessages]
+          .reverse()
+          .find((m) => m.role === "user" && m.text !== trimmed)?.text,
+      };
+
+      // Once the model is unreachable, stay local for the rest of the turn —
+      // going back for every round would just collect the same rate limit.
+      let offline = false;
+      // The fallback works from live state, so an unchanged answer means it has
+      // nothing further to add and the loop should stop rather than repeat.
+      let lastLocalCalls = "";
+      // Set when an offline round has said its piece and must not be repeated.
+      let lastOffline = false;
+
       // The agent loop. Each pass the model either asks for tools or answers;
       // tools are run against the real store and the results fed back, so a
       // single instruction can walk several steps of the journey.
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         const context = buildScreenContext(useAppStore.getState(), pathname);
-        const response = await postChat({
-          messages: history,
-          context,
-          contextSummary: summariseContext(context),
-          toolRounds: rounds,
-        });
 
-        if (response.error) {
-          update(replyId, {
-            text: response.error,
-            actions: actions.length ? actions : undefined,
-            pending: false,
-            error: true,
+        let response: ChatResponse;
+        if (offline) {
+          response = localTurn(trimmed, localContext);
+        } else {
+          response = await postChat({
+            messages: history,
+            context,
+            contextSummary: summariseContext(context),
+            toolRounds: rounds,
           });
-          return;
+          if (response.error) {
+            // The model is out. The tools are not, and neither are the
+            // figures — so carry on without it rather than handing back a
+            // status code.
+            offline = true;
+            update(replyId, { offline: true });
+            response = localTurn(trimmed, localContext);
+          }
+        }
+
+        // Offline, only a journey step asks for another round. Anything else
+        // re-reading the same sentence would act on it twice.
+        if (offline) {
+          const signature = JSON.stringify(response.toolCalls ?? []);
+          const repeated = signature !== "[]" && signature === lastLocalCalls;
+          lastLocalCalls = signature;
+          if (repeated) break;
+          if (!(response as { continues?: boolean }).continues) {
+            lastOffline = true;
+          }
         }
 
         reply = response;
@@ -244,6 +281,8 @@ export function CopilotPanel() {
 
         // Show what just happened before going back for the next round.
         update(replyId, { actions: [...actions] });
+
+        if (lastOffline) break;
       }
 
       update(replyId, {
@@ -254,15 +293,14 @@ export function CopilotPanel() {
             : "I did not have anything useful to add there."),
         actions: actions.length ? actions : undefined,
         pending: false,
+        offline,
       });
     } catch (error) {
+      console.error("[saathi] turn failed:", error);
       push({
         id: rid(),
         role: "assistant",
-        text:
-          error instanceof Error
-            ? `I could not reach my service: ${error.message}. Anything already done is listed above and can be undone.`
-            : "I could not reach my service. Anything already done is listed above and can be undone.",
+        text: "I could not reach my service. Anything I had already done is listed above and can be undone.",
         at: new Date().toISOString(),
         error: true,
       });
@@ -347,6 +385,8 @@ export function CopilotPanel() {
         <p className="border-b border-petrol-edge bg-petrol-soft px-5 py-2.5 text-[12px] text-[color:var(--petrol-400)]">
           Saathi is an AI — review anything it changes before you confirm.
         </p>
+
+        <JourneyStrip busy={busy} />
 
         <div
           ref={scrollRef}
@@ -445,6 +485,46 @@ export function CopilotPanel() {
   );
 }
 
+/**
+ * Where the return has actually got to, inside the panel.
+ *
+ * "Just file it for me" is five or six tool calls across four modules, and
+ * until now the only sign of progress was a list of sentences scrolling past.
+ * This is the same `stepDone` the rail uses, so the strip and the page behind
+ * it can never disagree — and because it is driven by store state rather than
+ * by the transcript, a step the user completed themselves lights up too.
+ */
+function JourneyStrip({ busy }: { busy: boolean }) {
+  const done = useAppStore(
+    useShallow((s) => FLOW_STEPS.map((f) => stepDone(f.id, s))),
+  );
+  const completed = done.filter(Boolean).length;
+  const next = FLOW_STEPS.find((_, i) => !done[i]);
+
+  return (
+    <div className="border-b border-petrol-edge bg-petrol-soft px-5 pb-3 pt-0.5">
+      <div className="flex items-center gap-[3px]" aria-hidden>
+        {FLOW_STEPS.map((step, i) => (
+          <span
+            key={step.id}
+            className={cx(
+              "h-[3px] flex-1 rounded-full transition-colors duration-300",
+              done[i]
+                ? "bg-[color:var(--petrol)]"
+                : "bg-[color:var(--petrol-edge)]",
+              busy && !done[i] && i === completed && "animate-pulse-dot",
+            )}
+          />
+        ))}
+      </div>
+      <p className="mt-1.5 text-[11.5px] text-[color:var(--petrol-400)]">
+        {completed} of {FLOW_STEPS.length} done
+        {next ? ` · next is ${next.label.toLowerCase()}` : " · ready to file"}
+      </p>
+    </div>
+  );
+}
+
 function MessageBubble({ message }: { message: CopilotMessage }) {
   if (message.role === "user") {
     return (
@@ -492,6 +572,20 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
             </p>
           ) : null,
         )}
+        {/* Said, not hidden. The actions below are real and the figures are the
+            platform's own, but this answer was assembled from rules rather than
+            written — and letting it pass as the model would be the one
+            dishonest thing in an app built on not doing that. */}
+        {message.offline ? (
+          <p className="mt-2.5 flex items-start gap-1.5 border-t border-petrol-edge pt-2 text-[11.5px] leading-snug text-[color:var(--petrol-400)]">
+            <span aria-hidden>◍</span>
+            <span>
+              Answered from the platform&rsquo;s own rules — Saathi&rsquo;s
+              service was unreachable just now. Anything done below is real and
+              still reversible.
+            </span>
+          </p>
+        ) : null}
       </div>
 
       {message.actions?.length ? <ActionList message={message} /> : null}
@@ -516,6 +610,16 @@ function ActionList({ message }: { message: CopilotMessage }) {
     ),
   );
 
+  // What this turn actually did to the bill, netted across its own actions.
+  // Each row already says what it changed; nobody should have to add them up.
+  const netDelta = useAppStore(
+    useShallow((s) =>
+      s.actionLog
+        .filter((a) => ids.includes(a.id) && !a.undone)
+        .reduce((sum, a) => sum + (a.delta ?? 0), 0),
+    ),
+  );
+
   return (
     <div className="rounded-[14px] bg-petrol-50 px-3.5 py-3">
       <div className="flex items-baseline justify-between gap-3">
@@ -536,6 +640,29 @@ function ActionList({ message }: { message: CopilotMessage }) {
           <ActionRow key={i} action={a} />
         ))}
       </ul>
+      {!message.pending && netDelta !== 0 ? (
+        <div
+          className={cx(
+            "mt-2.5 flex items-baseline justify-between gap-3 rounded-[var(--radius-sm)] px-3 py-2",
+            netDelta < 0 ? "bg-ok-50" : "bg-alert-50",
+          )}
+        >
+          <span className="text-[12.5px] text-ink-soft">
+            Tax due {netDelta < 0 ? "fell by" : "rose by"}
+          </span>
+          <span
+            className={cx(
+              "tnum text-[15px] font-semibold",
+              netDelta < 0
+                ? "text-[color:var(--ok)]"
+                : "text-[color:var(--alert)]",
+            )}
+          >
+            {inr(Math.abs(netDelta))}
+          </span>
+        </div>
+      ) : null}
+
       {!message.pending ? (
         <p className="mt-2.5 text-[11.5px] leading-snug text-[color:var(--petrol-400)]">
           Estimated from what you have told me so far. Everything reversible is
@@ -566,15 +693,42 @@ function renderEmphasis(line: string) {
     );
 }
 
+/**
+ * Where on the platform each tool actually leaves its mark, so a line in the
+ * transcript can be gone and looked at. Saathi saying it settled a difference
+ * is worth more when the difference is one tap away.
+ */
+const TOOL_DESTINATION: Record<string, string> = {
+  import_form16: "/income/salary",
+  set_income: "/income",
+  resolve_mismatch: "/reconciliation",
+  add_deduction: "/deductions",
+  switch_regime: "/regime",
+  confirm_regime: "/regime",
+  prepare_submission: "/filing",
+  record_advance_tax: "/filing/payment",
+  raise_grievance: "/grievance",
+  check_refund_status: "/refund",
+};
+
 function ActionRow({
   action,
 }: {
   action: NonNullable<CopilotMessage["actions"]>[number];
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const setOpen = useAppStore((s) => s.setCopilotOpen);
   const entry = useAppStore((s) =>
     action.logId ? s.actionLog.find((a) => a.id === action.logId) : undefined,
   );
   const undoAction = useAppStore((s) => s.undoAction);
+
+  // Only worth offering when it goes somewhere else, and only for something
+  // that actually happened.
+  const destination = action.ok ? TOOL_DESTINATION[action.tool] : undefined;
+  const elsewhere =
+    destination && destination !== pathname && !pathname.startsWith(`${destination}/`);
 
   return (
     <li className="flex items-start gap-2.5">
@@ -602,6 +756,20 @@ function ActionRow({
         >
           {action.summary}
         </span>
+        {elsewhere && !entry?.undone ? (
+          <button
+            onClick={() => {
+              router.push(destination);
+              // On a phone the panel covers the screen it just sent you to.
+              if (window.matchMedia("(max-width: 1023px)").matches) {
+                setOpen(false);
+              }
+            }}
+            className="tap mt-1 text-[12px] font-medium text-[color:var(--petrol)] underline underline-offset-2"
+          >
+            See it on the page
+          </button>
+        ) : null}
       </span>
       {entry?.undo && !entry.undone ? (
         <button
@@ -630,8 +798,23 @@ type ChatResponse = {
   modelParts?: Record<string, unknown>[];
   configured?: boolean;
   error?: string;
-  detail?: string;
 };
+
+/**
+ * One round of Saathi without the model behind it. Same shape as a reply from
+ * the service, so the agent loop does not care which one it got.
+ */
+function localTurn(
+  message: string,
+  context: { module?: string; previousMessage?: string },
+): ChatResponse & { continues?: boolean } {
+  const local = respondLocally(message, useAppStore.getState(), context);
+  return {
+    text: local.text,
+    toolCalls: local.toolCalls,
+    continues: local.continues,
+  };
+}
 
 async function postChat(body: unknown): Promise<ChatResponse> {
   const res = await fetch("/api/chat", {
@@ -641,10 +824,12 @@ async function postChat(body: unknown): Promise<ChatResponse> {
   });
   const data = (await res.json().catch(() => ({}))) as ChatResponse;
   if (!res.ok) {
+    // Only ever the sentence the route wrote. Anything the provider said is in
+    // the server log; a status code in a chat bubble helps nobody.
     return {
       error:
-        [data.error, data.detail].filter(Boolean).join(" ") ||
-        `Saathi's service returned ${res.status}.`,
+        data.error ||
+        "Saathi is unavailable at the moment. Nothing in your return is affected; try again shortly.",
     };
   }
   return data;

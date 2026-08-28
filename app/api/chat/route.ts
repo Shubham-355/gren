@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 
 import { functionDeclarations } from "@/lib/copilot/tools";
+import {
+  fromOllamaMessage,
+  ollamaContext,
+  ollamaHost,
+  ollamaModel,
+  ollamaTools,
+  toOllamaMessages,
+  type NormalisedParts,
+} from "@/lib/copilot/ollama";
 
 /**
  * Server-side language-model bridge.
@@ -78,6 +87,13 @@ DRIVING THE WHOLE JOURNEY
 - Call several tools in one turn when the next steps are unambiguous. Settling three AIS differences is three resolve_mismatch calls, not three conversations.
 - An empty return is the usual starting point. If form16Imported is false, import_form16 comes first — nothing can be computed before it, and prepare_submission will refuse.
 - The deduction questions and the amount already on record for each are in the context. Answer them with add_deduction using the sectionArgument given there; pass 0 for the ones the taxpayer has nothing under. Do not invent amounts, and do not ask the user to repeat a figure the context already holds.
+
+WHEN NOTHING IS ON RECORD — read account.documentsOnRecord first, every time
+- Some users sign in with a PAN that has no Form 16, no AIS and no 26AS behind it. The context says so: account.documentsOnRecord is false. This is not an error state, it is the ordinary case for a first-time filer, and it is a different job.
+- Nothing can be imported and nothing can be reconciled. import_form16 will refuse and there are no mismatches. Do not call either, and never tell the user you have pulled a document you have not.
+- Build the return by interviewing them. One question per message, in their own words — "what is your basic salary for the year?" rather than "enter your section 17(1) figure" — and record each answer with set_income as it arrives. Basic salary, HRA received and the tax the employer already deducted are the three that unlock everything else; then rent paid, interest, dividends.
+- Then walk the deduction questions the same way, recording each with add_deduction, 0 included. Only after income exists do the regime comparison and the review mean anything.
+- Never fill a figure in on their behalf, never carry a number over from the seeded taxpayer, and do not present an estimate as their return until they have given you the inputs it rests on. If they ask you to "just do it", explain in one sentence that you need their figures first, then ask the first question.
 - Say what you did in one short paragraph at the end, with the figure that changed. Do not narrate each call.
 
 THE THREE RISK TIERS — this matters more than anything else here
@@ -149,7 +165,7 @@ function toGeminiContents(body: RequestBody) {
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const keys = apiKeys();
 
   let body: RequestBody;
   try {
@@ -162,7 +178,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No messages supplied." }, { status: 400 });
   }
 
-  if (!apiKey) {
+  const local = ollamaModel();
+
+  if (keys.length === 0 && !local) {
     return NextResponse.json(
       {
         text: "Saathi is not switched on in this deployment — no model API key is configured. Everything else on the platform works exactly as it does with me running; see the README for the one environment variable it needs.",
@@ -189,36 +207,50 @@ export async function POST(request: Request) {
     safetySettings: [],
   };
 
-  let response: Response;
-  try {
-    response = await fetch(ENDPOINT(MODEL), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(30_000),
-    });
-  } catch (error) {
+  // In development, a local model answers first when one is configured. The
+  // journey gets walked many times while building and recording, and a free
+  // cloud key is twenty requests a minute. If the local model is not running,
+  // is too slow, or gives back nothing usable, the cloud keys take over — so
+  // this can never make the assistant worse than it would have been.
+  if (local) {
+    const parts = await tryOllama(body, local);
+    if (parts) return NextResponse.json(replyFromParts(parts));
+    console.warn("[saathi] local model gave nothing usable; using the cloud keys");
+  }
+
+  if (keys.length === 0) {
     return NextResponse.json(
       {
-        error: "Saathi could not be reached.",
-        detail: error instanceof Error ? error.message : String(error),
+        error:
+          "Saathi is unavailable: no model API key is configured and the local model did not answer. Everything else on the platform works.",
+      },
+      { status: 502 },
+    );
+  }
+
+  let response: Response;
+  try {
+    response = await callWithKeyRotation(payload, keys);
+  } catch (error) {
+    console.error("[saathi] upstream request failed:", error);
+    return NextResponse.json(
+      {
+        error:
+          "Saathi could not be reached — the connection to its service failed. Nothing in your return is affected; try again in a moment.",
       },
       { status: 502 },
     );
   }
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
+    const body = await response.text().catch(() => "");
+    // The provider's own body names the vendor, the model, our quota and a
+    // documentation URL. That belongs in the server log, not in a chat bubble
+    // in front of a taxpayer — it reads as a crash and tells them nothing they
+    // can act on.
+    console.error(`[saathi] upstream ${response.status}:`, body.slice(0, 1000));
     return NextResponse.json(
-      {
-        error: `Saathi's service returned ${response.status}.`,
-        // Surfaced in the panel so a misconfigured key is obvious rather than
-        // looking like Saathi is broken.
-        detail: detail.slice(0, 600),
-      },
+      { error: upstreamMessage(response.status, body) },
       { status: 502 },
     );
   }
@@ -232,21 +264,9 @@ export async function POST(request: Request) {
   };
 
   const parts = data.candidates?.[0]?.content?.parts ?? [];
-  // Handed straight back on the next turn, signatures and all.
-  const modelParts = parts as unknown as Record<string, unknown>[];
-  const text = parts
-    .map((p) => p.text)
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-  const toolCalls = parts
-    .filter((p) => p.functionCall)
-    .map((p) => ({
-      name: p.functionCall!.name,
-      args: p.functionCall!.args ?? {},
-    }));
+  const reply = replyFromParts(parts);
 
-  if (!text && toolCalls.length === 0) {
+  if (!reply.text && reply.toolCalls.length === 0) {
     const blocked = data.promptFeedback?.blockReason;
     return NextResponse.json({
       text: blocked
@@ -257,5 +277,281 @@ export async function POST(request: Request) {
     });
   }
 
-  return NextResponse.json({ text, toolCalls, modelParts, configured: true });
+  return NextResponse.json(reply);
+}
+
+/**
+ * One reply shape, whichever model produced it.
+ *
+ * `modelParts` is the model's own turn, handed straight back on the next round
+ * — newer Gemini models attach a thoughtSignature to each call and reject the
+ * follow-up without it. A local model has no such thing, and replaying its
+ * plain calls is equally acceptable to it.
+ */
+function replyFromParts(parts: NormalisedParts) {
+  const text = parts
+    .map((p) => p.text)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+
+  const toolCalls = parts
+    .filter((p) => p.functionCall)
+    .map((p) => ({
+      name: p.functionCall!.name,
+      args: p.functionCall!.args ?? {},
+    }));
+
+  return {
+    text,
+    toolCalls,
+    modelParts: parts as unknown as Record<string, unknown>[],
+    configured: true,
+  };
+}
+
+/**
+ * The provider's error, said in the product's own voice.
+ *
+ * Every branch answers the only two questions the user actually has: is my
+ * return alright, and what do I do now.
+ */
+function upstreamMessage(status: number, body: string): string {
+  if (status === 429) {
+    return `Saathi is being rate-limited — too many requests in a short window. Nothing in your return is affected; try again in ${retryWindow(body)}. Every screen keeps working in the meantime.`;
+  }
+  if (status === 401 || status === 403) {
+    return "Saathi is unavailable because its API key was rejected. Everything else on the platform works exactly as it does with Saathi running — the key is the one environment variable named in the README.";
+  }
+  if (status === 400) {
+    return "Saathi could not make sense of that request. Try rephrasing it, or use the screen itself — nothing in your return has changed.";
+  }
+  if (status >= 500) {
+    return "Saathi's service is having trouble at its end. Nothing in your return is affected; try again in a moment.";
+  }
+  return "Saathi is unavailable at the moment. Nothing in your return is affected; try again shortly.";
+}
+
+/** The retry delay the provider named, in seconds, if it named one. */
+function retryAfterSeconds(body: string): number | null {
+  const seconds =
+    Number.parseFloat(/retry in ([\d.]+)s/i.exec(body)?.[1] ?? "") ||
+    Number.parseFloat(/"retryDelay"\s*:\s*"([\d.]+)s"/.exec(body)?.[1] ?? "");
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+}
+
+/** How long to say to wait, from whatever the provider told us. */
+function retryWindow(body: string): string {
+  const seconds = retryAfterSeconds(body) ?? 0;
+
+  if (seconds <= 0) return "a minute or so";
+  if (seconds < 20) return "a few seconds";
+  if (seconds < 90) return "about a minute";
+  return `about ${Math.round(seconds / 60)} minutes`;
+}
+
+/* ================================================================
+   Keys
+   ================================================================ */
+
+/**
+ * Every key this deployment has, in the order they will be tried.
+ *
+ * One variable holds them all, comma-separated — how many there are is just
+ * how many you pasted:
+ *
+ *   GEMINI_API_KEY=keyone,keytwo,keythree
+ *
+ * A single key with no comma is the same thing with one entry, so nothing
+ * changes for a deployment that has only one. `GEMINI_API_KEYS` is accepted as
+ * an alias for hosts whose secret names are already set up that way.
+ */
+export function apiKeys(
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  const raw = `${env.GEMINI_API_KEY ?? ""},${env.GEMINI_API_KEYS ?? ""}`;
+  // Deduplicated: the same key twice would only spend the same quota twice.
+  return [...new Set(raw.split(",").map((k) => k.trim()).filter(Boolean))];
+}
+
+
+/**
+ * The key in use right now.
+ *
+ * It does not move on its own. One key carries every request until it stops
+ * working, and only then does the next one take over and become the one in
+ * use — so a deployment spends a key's quota through rather than leaving
+ * several of them part-used. It lives for the lifetime of the server process;
+ * nothing depends on it surviving a restart.
+ */
+let activeKey = 0;
+
+/**
+ * When each spent key becomes worth trying again.
+ *
+ * Without this the cursor cycles back onto a key that is still rate-limited and
+ * spends a round trip finding that out — every cycle, for as long as the window
+ * lasts. The provider names its own retry delay, so use it: a key steps out of
+ * the rotation and steps back in by itself.
+ *
+ * Capped, because a very long delay should not sideline a key for the life of
+ * the process, and treated as a hint rather than a rule — if every key is
+ * resting, they are all tried anyway. One wasted request beats refusing to ask.
+ */
+const restingUntil = new Map<string, number>();
+const MAX_COOLDOWN_MS = 15 * 60_000;
+
+function isResting(key: string, now: number): boolean {
+  const until = restingUntil.get(key);
+  if (until === undefined) return false;
+  if (until <= now) {
+    restingUntil.delete(key);
+    return false;
+  }
+  return true;
+}
+
+/** True for the errors where a different key would genuinely help. */
+function isQuotaError(status: number, body: string): boolean {
+  if (status === 429) return true;
+  // Some quota failures arrive as 403 with the exhaustion named in the body.
+  return (
+    status === 403 &&
+    /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(body)
+  );
+}
+
+/**
+ * One model call on the key currently in use, handing over to the next one the
+ * moment it runs out.
+ *
+ * The handover is invisible on purpose: a taxpayer mid-return has no use for
+ * the fact that a key was exhausted, only for the answer. The key that takes
+ * over then keeps every subsequent request until it too runs out. If every key
+ * is spent the last response is returned as it is, and the panel answers from
+ * the platform's own rules instead.
+ */
+async function callWithKeyRotation(
+  payload: unknown,
+  keys: string[],
+): Promise<Response> {
+  const now = Date.now();
+  // Start at the key in use and walk forward from there. Keys still inside a
+  // retry window they told us about are skipped — unless they all are, in
+  // which case one wasted request beats refusing to ask.
+  const walk = keys.map((_, i) => (activeKey + i) % keys.length);
+  const awake = walk.filter((i) => !isResting(keys[i], now));
+  const order = awake.length > 0 ? awake : walk;
+
+  let last: Response | null = null;
+
+  for (const index of order) {
+    const key = keys[index];
+    const response = await fetch(ENDPOINT(MODEL), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (response.ok) {
+      restingUntil.delete(key);
+      // Whichever key answered becomes the one in use, and stays it.
+      if (index !== activeKey) {
+        console.warn(
+          `[saathi] now using key ${index + 1} of ${keys.length}`,
+        );
+        activeKey = index;
+      }
+      return response;
+    }
+
+    // Read once — a Response body cannot be consumed twice, so the retry
+    // decision and the caller's logging share this copy.
+    const body = await response.text().catch(() => "");
+    last = new Response(body, {
+      status: response.status,
+      statusText: response.statusText,
+    });
+
+    // A 400 is not fixed by a different key, so stop and report it.
+    if (!isQuotaError(response.status, body)) return last;
+
+    const rest = Math.min((retryAfterSeconds(body) ?? 60) * 1_000, MAX_COOLDOWN_MS);
+    restingUntil.set(key, Date.now() + rest);
+    console.warn(
+      `[saathi] key ${index + 1}/${keys.length} is out of quota; resting it for ${Math.round(rest / 1000)}s and handing over to the next`,
+    );
+  }
+
+  return last ?? new Response("", { status: 502 });
+}
+
+/* ================================================================
+   The local model
+   ================================================================ */
+
+/**
+ * How long a local model gets before the cloud takes over.
+ *
+ * An 8B model on a laptop is slower than an API call, and a demo that stalls
+ * is worse than one that quietly costs a request. Generous enough for a real
+ * answer, short enough that nobody is left watching a spinner.
+ */
+const OLLAMA_TIMEOUT_MS = 60_000;
+
+/**
+ * One turn from the local model, or null if it could not give one.
+ *
+ * Null covers every way this can disappoint — not running, model not pulled,
+ * timed out, or an answer with neither text nor a tool call in it — and the
+ * caller then falls through to the cloud. That is the whole quality guarantee:
+ * a local model can save quota, but it is never allowed to be the reason the
+ * assistant said nothing.
+ */
+async function tryOllama(
+  body: RequestBody,
+  model: string,
+): Promise<NormalisedParts | null> {
+  try {
+    const response = await fetch(`${ollamaHost()}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: toOllamaMessages({
+          messages: body.messages,
+          systemPrompt: SYSTEM_PROMPT,
+          contextSummary: body.contextSummary,
+          context: body.context,
+          toolRounds: body.toolRounds,
+        }),
+        tools: ollamaTools,
+        stream: false,
+        options: {
+          temperature: 0.4,
+          num_predict: 900,
+          num_ctx: ollamaContext(),
+        },
+      }),
+      signal: AbortSignal.timeout(OLLAMA_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      console.warn(`[saathi] local model returned ${response.status}`);
+      return null;
+    }
+
+    const data = (await response.json()) as {
+      message?: { content?: string; tool_calls?: { function?: { name?: string; arguments?: unknown } }[] };
+    };
+    const parts = fromOllamaMessage(data.message ?? {});
+    return parts.length > 0 ? parts : null;
+  } catch (error) {
+    console.warn(
+      "[saathi] local model unreachable:",
+      error instanceof Error ? error.message : error,
+    );
+    return null;
+  }
 }

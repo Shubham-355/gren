@@ -22,8 +22,22 @@ OTP. No account is created and nothing leaves your browser except copilot
 messages.
 
 Without a model API key everything works except the copilot, which says so
-plainly instead of failing silently. `.env.example` names the one variable it
-needs.
+plainly instead of failing silently. `.env.example` names the variables it
+takes. `GEMINI_API_KEY` holds one key, or several separated by commas —
+`keyone,keytwo,keythree`. One key serves every request until it runs out of
+quota; the next then takes over and stays in use.
+
+In development, setting `OLLAMA_MODEL` points the copilot at a model running
+on this machine instead, so building and recording do not spend cloud quota.
+It is opt-in, never used in a production build, and falls through to the cloud
+keys the moment the local model is unreachable, too slow, or gives back
+nothing usable — so it can save quota but never degrade the assistant.
+
+When the model is unreachable — a rate limit, a dead connection, no key at all
+— the panel does not show a provider error. It tries the next key immediately,
+and if every key is spent it answers from the platform's own rules instead:
+same tools, same store, same Tier 3 confirmations, and a line on the reply
+saying that is where the answer came from.
 
 ---
 
@@ -75,6 +89,10 @@ Implemented against **FY 2025-26 / Assessment Year 2026-27** (Finance Act 2025):
   the fact that the new regime disallows the loss entirely
 - Chapter VI-A with real per-section ceilings, and 80CCD(2) surviving into the
   new regime at 14% of basic instead of 10%
+- 80G as it actually works: half the donation, and only of the part within 10%
+  of gross total income after every other Chapter VI-A deduction — with the
+  notified national funds allowed in full. 80U as the flat ₹75,000 / ₹1,25,000
+  it is, rather than an amount you type
 - The Chapter VI-A ceilings that move with the taxpayer's own age: 80D at
   ₹50,000 from 60, 80DDB at ₹1,00,000, and 80TTB replacing 80TTA — five times
   the ceiling, and it covers deposit interest as well. Both are capped at the
@@ -97,6 +115,16 @@ Implemented against **FY 2025-26 / Assessment Year 2026-27** (Finance Act 2025):
 - Break-even shelter, solved numerically rather than looked up: how much
   old-regime relief you would need before the old regime wins at your income
 - ITR-1 eligibility, checked against eight real disqualifying conditions
+- Section 115BAC(6): the old regime can only be opted into on a return filed by
+  the due date, so past it the regime screen stops offering it and the copilot
+  refuses to switch
+
+`bun run test` runs the engine against the Act: 60 tests over the slabs, the
+least-of-three HRA legs, the house property set-off caps, 87A with marginal
+relief, surcharge marginal relief, the age-aware Chapter VI-A ceilings, 80G's
+qualifying limit, and every leg of 234A/B/C/F. Each expected figure is worked
+out by hand from the rule it tests, so a failure means the arithmetic moved
+rather than that a snapshot went stale.
 
 ---
 
@@ -180,6 +208,10 @@ Also rendered in-app at `/help#about`.
 - The taxpayer. Ananya Verma does not exist. PAN is the documentation
   synthetic `AAAPZ1234C`; employer, banks and landlord are invented.
 - Login and OTP. No authentication happens; any six digits work.
+- Documents exist only for the seeded taxpayer. A PAN this prototype has just
+  been handed has no Form 16, no AIS and no 26AS, and the app says so rather
+  than handing over somebody else's — the copilot interviews you for the
+  figures instead.
 - Form 16, AIS, TIS and 26AS — hand-written seed data, including one deliberate
   mismatch so the reconciliation module has something real to resolve.
 - Submission. Nothing is transmitted anywhere; the acknowledgement number is
@@ -203,7 +235,12 @@ Also rendered in-app at `/help#about`.
 ## The demo path
 
 1. Sign in — pre-filled PAN, any six digits. The OTP verifies itself on the
-   sixth digit; there is no welcome interstitial afterwards.
+   sixth digit, and then asks which of two things you want. **Start from
+   nothing** is the default: your name, PAN and bank account are on record and
+   nothing else is, so the return is built by answering for it. **Prefilled**
+   is the tour — the Form 16 and AIS below, already there. Any other PAN goes
+   straight to the first; nothing is filed against it, so there is nothing to
+   pull. The demo path below assumes the tour.
 2. **Income → Salary** — import the Form 16. ₹18,40,000 gross, ₹2,45,000 already
    deducted.
 3. **AIS · TIS · 26AS** — three unresolved gaps. Fixed deposit interest of
