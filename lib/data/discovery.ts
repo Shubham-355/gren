@@ -1,5 +1,6 @@
 import { deductionEvidence } from "./seed";
-import type { DeductionInput } from "@/lib/tax/compute";
+import type { DeductionInput, OtherSourcesInput } from "@/lib/tax/compute";
+import { interestDeductionRule } from "@/lib/tax/compute";
 
 /**
  * The guided-discovery script for the deductions workspace.
@@ -124,3 +125,43 @@ export const discoveryQuestions: DiscoveryQuestion[] = [
     oldRegimeOnly: true,
   },
 ];
+
+/**
+ * The script, adjusted for who is answering it.
+ *
+ * Two things are not knowable when the questions are written down: how much
+ * interest this taxpayer actually declared — the deduction cannot exceed it —
+ * and whether they are 60 or over, which replaces 80TTA with the far more
+ * generous 80TTB. Both are settled here so every screen and the copilot ask
+ * the same question.
+ */
+export function discoveryQuestionsFor(
+  age: number,
+  otherSources: OtherSourcesInput,
+): DiscoveryQuestion[] {
+  const rule = interestDeductionRule(age, otherSources);
+  return discoveryQuestions.map((q) => {
+    if (q.id !== "savings-interest") return q;
+    const senior = rule.section === "80TTB";
+    return {
+      ...q,
+      question: senior
+        ? "Do you earn interest on savings accounts or fixed deposits?"
+        : q.question,
+      why: senior
+        ? `From 60, section 80TTB replaces 80TTA: up to ₹${rule.ceiling.toLocaleString(
+            "en-IN",
+          )} of interest, and unlike 80TTA it covers fixed deposits as well as savings accounts. It is the single largest thing most retired people are entitled to and do not claim.`
+        : q.why,
+      sectionLabel: rule.section,
+      suggested: Math.min(rule.eligibleInterest, rule.ceiling),
+      suggestedLabel: senior
+        ? "The savings and deposit interest you have declared"
+        : q.suggestedLabel,
+      ceiling: rule.ceiling,
+      followUp: senior
+        ? "The deduction comes off the interest you actually declared, so it can never be more than what is in your return."
+        : q.followUp,
+    };
+  });
+}

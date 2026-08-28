@@ -287,12 +287,73 @@ export function computeHouseProperty(hp: HousePropertyInput, regime: Regime) {
 /** ------------------------------------------------------------------
  *  Chapter VI-A
  *  ------------------------------------------------------------------ */
+/**
+ * The three Chapter VI-A ceilings that move with the taxpayer's own age.
+ * Turning 60 is not a footnote here: it doubles the health-insurance ceiling,
+ * more than doubles the one for specified treatment, and replaces 80TTA with
+ * a 80TTB five times its size that also covers deposits.
+ */
+export function ageAwareLimits(age: number) {
+  const senior = age >= 60;
+  return {
+    senior,
+    s80D_self: senior ? LIMITS.s80D_self_senior : LIMITS.s80D_self,
+    s80DDB: senior ? LIMITS.s80DDB_senior : LIMITS.s80DDB,
+  };
+}
+
+export type InterestDeductionRule = {
+  section: "80TTA" | "80TTB";
+  ceiling: number;
+  /** the interest income this deduction may be set against */
+  eligibleInterest: number;
+  /** a plain noun phrase for that income, for use mid-sentence */
+  covers: string;
+  /** the interest that pointedly does not count, where some does not */
+  excludes?: string;
+};
+
+/**
+ * 80TTA or 80TTB, and how much interest there is to claim it against.
+ *
+ * Both are deductions *of* interest income, not allowances on top of it — you
+ * cannot deduct ₹10,000 of savings interest you never declared. The app used
+ * to allow exactly that.
+ */
+export function interestDeductionRule(
+  age: number,
+  otherSources: OtherSourcesInput,
+): InterestDeductionRule {
+  const savings = num(otherSources.savingsInterest);
+  if (age >= 60) {
+    return {
+      section: "80TTB",
+      ceiling: LIMITS.s80TTB,
+      eligibleInterest: savings + num(otherSources.fdInterest),
+      covers: "savings and fixed deposit interest",
+    };
+  }
+  return {
+    section: "80TTA",
+    ceiling: LIMITS.s80TTA,
+    eligibleInterest: savings,
+    covers: "savings account interest",
+    excludes: "fixed deposits do not count, only savings accounts",
+  };
+}
+
 export function computeChapterVIA(
   d: DeductionInput,
   regime: Regime,
-  employerNps: number,
-  basicSalary: number,
+  context: {
+    employerNps: number;
+    basicSalary: number;
+    age: number;
+    otherSources: OtherSourcesInput;
+  },
 ): { total: number; breakdown: LineItem[] } {
+  const { employerNps, basicSalary, age } = context;
+  const limits = ageAwareLimits(age);
   const breakdown: LineItem[] = [];
 
   // 80CCD(2) — employer NPS. Allowed in BOTH regimes; the ceiling differs.
@@ -330,7 +391,7 @@ export function computeChapterVIA(
       amount: ccd1b,
     });
 
-  const dSelf = Math.min(num(d.s80D_self), LIMITS.s80D_self);
+  const dSelf = Math.min(num(d.s80D_self), limits.s80D_self);
   const parentCap = d.s80D_parents_senior
     ? LIMITS.s80D_parents_senior
     : LIMITS.s80D_parents;
@@ -339,14 +400,22 @@ export function computeChapterVIA(
     breakdown.push({
       label: "80D — health insurance premium",
       amount: dSelf + dParents,
-      note: `Self and family up to ₹${inr(LIMITS.s80D_self)}, parents up to ₹${inr(parentCap)}${
+      note: `Self and family up to ₹${inr(limits.s80D_self)}${
+        limits.senior ? " (you are a senior citizen)" : ""
+      }, parents up to ₹${inr(parentCap)}${
         d.s80D_parents_senior ? " (senior citizen parents)" : ""
       }`,
     });
 
-  const ddb = Math.min(num(d.s80DDB), LIMITS.s80DDB);
+  const ddb = Math.min(num(d.s80DDB), limits.s80DDB);
   if (ddb > 0)
-    breakdown.push({ label: "80DDB — specified medical treatment", amount: ddb });
+    breakdown.push({
+      label: "80DDB — specified medical treatment",
+      amount: ddb,
+      note: limits.senior
+        ? `Ceiling ₹${inr(limits.s80DDB)} for a senior citizen`
+        : undefined,
+    });
 
   const e80 = num(d.s80E);
   if (e80 > 0)
@@ -359,12 +428,32 @@ export function computeChapterVIA(
   const g80 = num(d.s80G);
   if (g80 > 0) breakdown.push({ label: "80G — donations", amount: g80 });
 
-  const tta = Math.min(num(d.s80TTA), LIMITS.s80TTA);
-  if (tta > 0)
+  const interestRule = interestDeductionRule(age, context.otherSources);
+  const claimedInterest = num(d.s80TTA);
+  const tta = Math.min(
+    claimedInterest,
+    interestRule.ceiling,
+    interestRule.eligibleInterest,
+  );
+  if (tta > 0 || claimedInterest > 0)
     breakdown.push({
-      label: "80TTA — savings bank interest",
+      label: `${interestRule.section} — ${
+        interestRule.section === "80TTB"
+          ? "interest on deposits, senior citizen"
+          : "savings bank interest"
+      }`,
       amount: tta,
-      note: "Ceiling ₹10,000, and it covers savings interest only — not fixed deposits",
+      // Two things can bind, and saying which one did is the whole point of
+      // the note: a ceiling you could plan around, or interest you never
+      // declared.
+      note:
+        tta < claimedInterest && interestRule.eligibleInterest <= interestRule.ceiling
+          ? `Limited to the ₹${inr(interestRule.eligibleInterest)} of ${interestRule.covers} actually declared in your return`
+          : tta < claimedInterest
+            ? `Capped at the ₹${inr(interestRule.ceiling)} ceiling — you entered ₹${inr(claimedInterest)}`
+            : `Ceiling ₹${inr(interestRule.ceiling)}, covering ${interestRule.covers}${
+                interestRule.excludes ? ` — ${interestRule.excludes}` : ""
+              }`,
     });
 
   const eeb = Math.min(num(d.s80EEB), LIMITS.s80EEB);
@@ -509,12 +598,12 @@ export function computeTax(
     incomeFromSalary + incomeFromHouseProperty + incomeFromOtherSources;
 
   // --- Chapter VI-A ---
-  const via = computeChapterVIA(
-    input.deductions,
-    regime,
-    num(s.employerNps),
-    num(s.basic),
-  );
+  const via = computeChapterVIA(input.deductions, regime, {
+    employerNps: num(s.employerNps),
+    basicSalary: num(s.basic),
+    age: input.age,
+    otherSources: input.otherSources,
+  });
   // Chapter VI-A can never take income below zero.
   const chapterVIA = Math.min(via.total, clampMin0(grossTotalIncome));
 

@@ -19,7 +19,11 @@ import {
   Toggle,
   cx,
 } from "@/components/ui";
-import { discoveryQuestions, type DiscoveryQuestion } from "@/lib/data/discovery";
+import {
+  discoveryQuestions,
+  discoveryQuestionsFor,
+  type DiscoveryQuestion,
+} from "@/lib/data/discovery";
 import { inr } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
 import {
@@ -28,7 +32,13 @@ import {
   useAppStore,
   type AppState,
 } from "@/lib/store/useAppStore";
-import { computeTax, type DeductionInput } from "@/lib/tax/compute";
+import {
+  ageAwareLimits,
+  computeTax,
+  interestDeductionRule,
+  type DeductionInput,
+  type OtherSourcesInput,
+} from "@/lib/tax/compute";
 import { LIMITS } from "@/lib/tax/constants";
 
 /**
@@ -79,13 +89,8 @@ function GuidedDiscovery({ onBrowse }: { onBrowse: () => void }) {
   const setCopilotOpen = useAppStore((s) => s.setCopilotOpen);
 
   const questions = useMemo(
-    () =>
-      discoveryQuestions.map((q) =>
-        q.id === "savings-interest"
-          ? { ...q, suggested: state.otherSources.savingsInterest }
-          : q,
-      ),
-    [state.otherSources.savingsInterest],
+    () => discoveryQuestionsFor(state.profile.age, state.otherSources),
+    [state.profile.age, state.otherSources],
   );
 
   const remaining = questions.filter(
@@ -387,7 +392,7 @@ function QuestionBody({
    Direct section entry
    ================================================================ */
 
-const sections: {
+const baseSections: {
   key: keyof DeductionInput;
   ceiling?: number;
   blurb: string;
@@ -440,6 +445,41 @@ const sections: {
   },
 ];
 
+/**
+ * The same list, with the three ceilings that move with age set to this
+ * taxpayer's. Showing "up to ₹25,000" to a 64-year-old is not a rounding
+ * error — it is half of what they are entitled to.
+ */
+function sectionsFor(
+  age: number,
+  otherSources: OtherSourcesInput,
+): (typeof baseSections)[number][] {
+  const limits = ageAwareLimits(age);
+  const interest = interestDeductionRule(age, otherSources);
+  return baseSections.map((s) => {
+    if (s.key === "s80D_self")
+      return {
+        ...s,
+        ceiling: limits.s80D_self,
+        blurb: limits.senior
+          ? "Health insurance for you and your family — the senior citizen ceiling"
+          : s.blurb,
+      };
+    if (s.key === "s80DDB") return { ...s, ceiling: limits.s80DDB };
+    if (s.key === "s80TTA")
+      return {
+        ...s,
+        ceiling: interest.ceiling,
+        term: `Section ${interest.section}`,
+        blurb:
+          interest.section === "80TTB"
+            ? "Savings and deposit interest, from the year you turn 60"
+            : s.blurb,
+      };
+    return s;
+  });
+}
+
 function SectionList({ onGuided }: { onGuided: () => void }) {
   const state = useAppStore();
   const { current } = useTax();
@@ -470,7 +510,7 @@ function SectionList({ onGuided }: { onGuided: () => void }) {
         <div className="space-y-4">
           <Card>
             <div className="divide-y divide-[color:var(--line)]">
-              {sections.map((s) => {
+              {sectionsFor(state.profile.age, state.otherSources).map((s) => {
                 const raw = state.deductions[s.key] as number;
                 const capped = s.ceiling ? Math.min(raw, s.ceiling) : raw;
                 const over = s.ceiling ? raw > s.ceiling : false;
@@ -480,9 +520,11 @@ function SectionList({ onGuided }: { onGuided: () => void }) {
                       <div className="min-w-0">
                         <div className="text-[14.5px] font-medium">
                           {s.term ? (
-                            <Term name={s.term}>{sectionLabel(s.key)}</Term>
+                            <Term name={s.term}>
+                              {sectionLabel(s.key, state.profile.age)}
+                            </Term>
                           ) : (
-                            sectionLabel(s.key)
+                            sectionLabel(s.key, state.profile.age)
                           )}
                           {s.ceiling ? (
                             <span className="ml-1.5 text-[11.5px] font-normal text-ink-faint">

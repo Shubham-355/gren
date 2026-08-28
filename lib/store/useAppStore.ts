@@ -753,12 +753,12 @@ export const useAppStore = create<AppState>()(
           get().logAction({
             actor,
             tool: "add_deduction",
-            summary: `Set ${sectionLabel(section)} to ₹${value.toLocaleString("en-IN")}`,
+            summary: `Set ${sectionLabel(section, get().profile.age)} to ₹${value.toLocaleString("en-IN")}`,
             delta: after - before,
             why:
               get().regime === "new"
-                ? `Recorded, but the new regime does not allow ${sectionLabel(section)}, so your tax has not moved. It would apply the moment you switch to the old regime.`
-                : `₹${value.toLocaleString("en-IN")} under ${sectionLabel(section)} took your tax from ₹${before.toLocaleString("en-IN")} to ₹${after.toLocaleString("en-IN")} — statutory ceilings already applied.`,
+                ? `Recorded, but the new regime does not allow ${sectionLabel(section, get().profile.age)}, so your tax has not moved. It would apply the moment you switch to the old regime.`
+                : `₹${value.toLocaleString("en-IN")} under ${sectionLabel(section, get().profile.age)} took your tax from ₹${before.toLocaleString("en-IN")} to ₹${after.toLocaleString("en-IN")} — statutory ceilings already applied.`,
             undo: {
               kind: "deduction",
               section,
@@ -1260,7 +1260,16 @@ function taxNow(s: AppState): number {
   return computeTax(toTaxpayerInput(s)).totalTaxLiability;
 }
 
-export function sectionLabel(section: keyof DeductionInput): string {
+/**
+ * The name of a section, as it applies to this taxpayer. Only one entry moves:
+ * from 60, the savings-interest field is 80TTB rather than 80TTA, and calling
+ * it 80TTA in the timeline would be telling them the wrong section.
+ */
+export function sectionLabel(
+  section: keyof DeductionInput,
+  age?: number,
+): string {
+  if (section === "s80TTA" && age !== undefined && age >= 60) return "80TTB";
   const labels: Record<keyof DeductionInput, string> = {
     s80C: "80C",
     s80CCD1B: "80CCD(1B)",

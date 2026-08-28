@@ -75,6 +75,11 @@ Implemented against **FY 2025-26 / Assessment Year 2026-27** (Finance Act 2025):
   the fact that the new regime disallows the loss entirely
 - Chapter VI-A with real per-section ceilings, and 80CCD(2) surviving into the
   new regime at 14% of basic instead of 10%
+- The Chapter VI-A ceilings that move with the taxpayer's own age: 80D at
+  ₹50,000 from 60, 80DDB at ₹1,00,000, and 80TTB replacing 80TTA — five times
+  the ceiling, and it covers deposit interest as well. Both are capped at the
+  interest actually declared, because they are deductions of that income rather
+  than allowances on top of it
 - Section 87A rebate **with marginal relief**, so income just above ₹12,00,000
   never pays more extra tax than the extra income
 - Surcharge with marginal relief at each threshold, capped at 25% in the new

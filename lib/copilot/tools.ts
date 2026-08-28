@@ -57,6 +57,9 @@ export const DEDUCTION_SECTIONS = [
   "80E",
   "80G",
   "80TTA",
+  // 80TTB is the same field for a taxpayer of 60 or over. Accepting both names
+  // means the copilot can use whichever the user said and still be right.
+  "80TTB",
   "80EEB",
   "80U",
 ] as const;
@@ -160,7 +163,7 @@ export const functionDeclarations: FunctionDeclaration[] = [
           type: "STRING",
           enum: [...DEDUCTION_SECTIONS],
           description:
-            "Which section. Use 80D_self for the taxpayer's own health cover and 80D_parents for their parents'.",
+            "Which section. Use 80D_self for the taxpayer's own health cover and 80D_parents for their parents'. 80TTA and 80TTB are the same field — the app picks the right one from the taxpayer's age, and the deduction is limited to the interest actually declared.",
         },
         amount: {
           type: "NUMBER",

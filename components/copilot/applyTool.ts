@@ -39,6 +39,7 @@ const SECTION_MAP: Record<string, keyof DeductionInput> = {
   "80E": "s80E",
   "80G": "s80G",
   "80TTA": "s80TTA",
+  "80TTB": "s80TTA",
   "80EEB": "s80EEB",
   "80U": "s80U",
 };

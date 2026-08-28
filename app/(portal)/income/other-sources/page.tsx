@@ -18,13 +18,19 @@ import { aisEntries } from "@/lib/data/seed";
 import { inr } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
 import { pendingMismatches, useAppStore } from "@/lib/store/useAppStore";
-import { LIMITS } from "@/lib/tax/constants";
+import { interestDeductionRule } from "@/lib/tax/compute";
 
 export default function OtherSourcesPage() {
   const state = useAppStore();
   const { current } = useTax();
   const pending = pendingMismatches(state).filter(
     (e) => e.category === "Interest" || e.category === "Dividend",
+  );
+  // 80TTA below 60, 80TTB from 60 — different ceiling, and a different answer
+  // to whether deposit interest counts.
+  const interestRule = interestDeductionRule(
+    state.profile.age,
+    state.otherSources,
   );
 
   const aisTotal = aisEntries
@@ -76,8 +82,10 @@ export default function OtherSourcesPage() {
                 label="Savings account interest"
                 hint={
                   state.regime === "old"
-                    ? `The first ₹${LIMITS.s80TTA.toLocaleString("en-IN")} is deductible under 80TTA`
-                    : "Fully taxable in the new regime — 80TTA does not apply"
+                    ? `The first ₹${interestRule.ceiling.toLocaleString(
+                        "en-IN",
+                      )} is deductible under ${interestRule.section}`
+                    : `Fully taxable in the new regime — ${interestRule.section} does not apply`
                 }
               >
                 <MoneyInput
@@ -88,7 +96,11 @@ export default function OtherSourcesPage() {
 
               <Field
                 label="Fixed and recurring deposit interest"
-                hint="Taxable in full. 80TTA never covers deposits, only savings accounts."
+                hint={
+                  interestRule.section === "80TTB"
+                    ? "From 60, 80TTB covers this too — it counts towards the same ₹50,000."
+                    : "Taxable in full. 80TTA never covers deposits, only savings accounts."
+                }
               >
                 <MoneyInput
                   value={state.otherSources.fdInterest}
@@ -209,11 +221,23 @@ export default function OtherSourcesPage() {
             {state.regime === "old" && state.deductions.s80TTA > 0 ? (
               <div className="border-t border-line px-4 py-3">
                 <Row
-                  label={<Term name="Section 80TTA">80TTA deduction</Term>}
-                  value={Math.min(state.deductions.s80TTA, LIMITS.s80TTA)}
+                  label={
+                    <Term name={`Section ${interestRule.section}`}>
+                      {interestRule.section} deduction
+                    </Term>
+                  }
+                  value={Math.min(
+                    state.deductions.s80TTA,
+                    interestRule.ceiling,
+                    interestRule.eligibleInterest,
+                  )}
                   negative
                   tone="ok"
-                  note="claimed on the deductions screen"
+                  note={
+                    state.deductions.s80TTA > interestRule.eligibleInterest
+                      ? "limited to the interest actually declared above"
+                      : "claimed on the deductions screen"
+                  }
                 />
               </div>
             ) : null}

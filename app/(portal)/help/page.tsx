@@ -127,7 +127,7 @@ export default function HelpPage() {
           <CardHeader title="Genuinely real" eyebrow="Actual working software" />
           <ul className="space-y-2.5 px-4 py-4">
             {[
-              "Every tax figure. Slabs, standard deduction, HRA under 10(13A), house property under 22-24, Chapter VI-A ceilings, the 87A rebate with marginal relief, surcharge and cess are implemented as functions in lib/tax and computed live. Change any input anywhere and every number on the platform moves.",
+              "Every tax figure. Slabs, standard deduction, HRA under 10(13A), house property under 22-24, Chapter VI-A ceilings including the ones that change at 60, the 87A rebate with marginal relief, surcharge, cess and the interest and fee under 234A, 234B, 234C and 234F are implemented as functions in lib/tax and computed live. Change any input anywhere and every number on the platform moves.",
               "The old-versus-new comparison, computed twice on the same inputs rather than looked up.",
               "The break-even deduction figure, solved numerically against your actual income.",
               "ITR-1 eligibility, checked against eight real disqualifying conditions.",

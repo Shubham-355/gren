@@ -1,6 +1,9 @@
 "use client";
 
-import { discoveryQuestions } from "@/lib/data/discovery";
+import {
+  discoveryQuestions,
+  discoveryQuestionsFor,
+} from "@/lib/data/discovery";
 import {
   aisEntries,
   form16,
@@ -134,15 +137,15 @@ export function buildScreenContext(state: AppState, pathname: string) {
        * this PAN for each one. The copilot can answer these directly with
        * add_deduction instead of walking the user through eight screens.
        */
-      questions: discoveryQuestions.map((q) => ({
+      questions: discoveryQuestionsFor(
+        state.profile.age,
+        state.otherSources,
+      ).map((q) => ({
         id: q.id,
         asks: q.question,
         section: q.sectionLabel,
         sectionArgument: SECTION_ARGUMENTS[q.section] ?? q.sectionLabel,
-        amountOnRecord:
-          q.id === "savings-interest"
-            ? state.otherSources.savingsInterest
-            : q.suggested,
+        amountOnRecord: q.suggested,
         ceiling: q.ceiling ?? null,
         answered: state.discoveryAnswered.includes(q.id),
         currentlyClaimed: state.deductions[q.section],
