@@ -11,6 +11,7 @@ import {
   SURCHARGE_BANDS,
   type Slab,
 } from "./constants";
+import { computeInterest, type InterestResult } from "./interest";
 
 export type Regime = "new" | "old";
 
@@ -73,6 +74,13 @@ export type TaxpayerInput = {
   advanceTaxPaid: number;
   selfAssessmentTaxPaid: number;
   tdsOnOtherIncome: number;
+  /**
+   * Cumulative advance tax paid by each of the four instalment dates, when the
+   * taxpayer has recorded them. Left out, section 234C assumes the worst.
+   */
+  advanceTaxSchedule?: number[];
+  /** ISO date the return was filed; today, for a return not yet submitted */
+  filedOn?: string;
 };
 
 export type LineItem = {
@@ -106,6 +114,10 @@ export type TaxComputation = {
   surcharge: number;
   cess: number;
   totalTaxLiability: number;
+  /** interest and fee under sections 234A, 234B, 234C and 234F */
+  interest: InterestResult;
+  /** what the return actually asks for: tax plus that interest and fee */
+  totalTaxAndInterest: number;
   tdsCredit: number;
   advanceTax: number;
   selfAssessmentTax: number;
@@ -533,7 +545,21 @@ export function computeTax(
   const advanceTax = num(input.advanceTaxPaid);
   const selfAssessmentTax = num(input.selfAssessmentTaxPaid);
 
-  const balance = totalTaxLiability - tdsCredit - advanceTax - selfAssessmentTax;
+  // Interest and the late-filing fee sit on top of the tax itself, exactly as
+  // they do in Part B-TTI of the return, and are part of what is payable.
+  const interest = computeInterest({
+    totalTaxLiability,
+    totalIncome,
+    tdsCredit,
+    advanceTaxPaid: advanceTax,
+    selfAssessmentTaxPaid: selfAssessmentTax,
+    advanceTaxSchedule: input.advanceTaxSchedule,
+    filedOn: input.filedOn ? new Date(input.filedOn) : new Date(),
+  });
+  const totalTaxAndInterest = totalTaxLiability + interest.total;
+
+  const balance =
+    totalTaxAndInterest - tdsCredit - advanceTax - selfAssessmentTax;
 
   return {
     regime,
@@ -557,6 +583,8 @@ export function computeTax(
     surcharge,
     cess,
     totalTaxLiability,
+    interest,
+    totalTaxAndInterest,
     tdsCredit,
     advanceTax,
     selfAssessmentTax,

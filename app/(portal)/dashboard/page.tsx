@@ -88,7 +88,11 @@ export default function DashboardPage() {
           {inRefund
             ? `Tax of ${inr(current.totalTaxLiability)} against ${inr(current.tdsCredit)} already deducted. The difference comes back to you.`
             : current.taxPayable > 0
-              ? `Tax of ${inr(current.totalTaxLiability)} against ${inr(current.tdsCredit)} already deducted. The shortfall is self-assessment tax.`
+              ? `Tax of ${inr(current.totalTaxLiability)} against ${inr(current.tdsCredit)} already deducted. The shortfall is self-assessment tax${
+                  current.interest.total > 0
+                    ? `, plus ${inr(current.interest.total)} of interest and fee for not having paid it during the year`
+                    : ""
+                }.`
               : "Tax due and tax already paid are square — nothing to pay, nothing to come back."}
         </p>
       </section>

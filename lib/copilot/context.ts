@@ -164,6 +164,20 @@ export function buildScreenContext(state: AppState, pathname: string) {
       surcharge: Math.round(current.surcharge),
       cess: Math.round(current.cess),
       totalTaxLiability: current.totalTaxLiability,
+      // Interest and the late fee are part of what is payable, and nothing in a
+      // Form 16 hints at them — so the copilot is told about them explicitly
+      // rather than being left to infer them from the balance.
+      interestAndFee: {
+        total: current.interest.total,
+        filingIsLate: current.interest.late,
+        charges: current.interest.charges.map((charge) => ({
+          section: charge.section,
+          amount: charge.amount,
+          why: charge.reason,
+        })),
+        instalmentDatesAssumed: current.interest.scheduleAssumed,
+      },
+      totalTaxAndInterest: current.totalTaxAndInterest,
       tdsCredit: current.tdsCredit,
       selfAssessmentTaxPaid: current.selfAssessmentTax,
       refundDue: current.refundDue,

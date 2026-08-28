@@ -16,6 +16,7 @@ import {
   Stat,
   Term,
 } from "@/components/ui";
+import { InterestBreakdown } from "@/components/ui/InterestBreakdown";
 import { inr, shortDate } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
 import { buildPaymentConfirmation } from "@/lib/confirmations";
@@ -30,6 +31,11 @@ export default function PaymentPage() {
   const [method, setMethod] = useState<Method>("upi");
 
   const due = current.taxPayable;
+  // Naming the sections keeps the line honest: this part of the bill is not tax.
+  const interestSections = current.interest.charges
+    .filter((charge) => charge.amount > 0)
+    .map((charge) => charge.section)
+    .join(", ");
 
   if (state.filing.paymentDone) {
     return (
@@ -104,9 +110,9 @@ export default function PaymentPage() {
         <Callout tone="info" title="When would this screen have something on it?" collapsible>
           Self-assessment tax under section 140A appears when the tax on your total
           income exceeds everything already deducted — usually because of interest
-          or dividend income that nobody withheld enough on. Accepting a large AIS
-          entry on the reconciliation screen is the fastest way to see this page
-          come alive.
+          or dividend income that nobody withheld enough on. With a shortfall come
+          sections 234B and 234C, which charge 1% a month for not having paid it
+          as advance tax during the year.
         </Callout>
         <div className="flex gap-2">
           <Link
@@ -150,6 +156,14 @@ export default function PaymentPage() {
             />
             {current.advanceTax > 0 ? (
               <Row label="Advance tax paid" value={current.advanceTax} negative indent />
+            ) : null}
+            {current.interest.total > 0 ? (
+              <Row
+                label="Interest and fee for paying late"
+                value={current.interest.total}
+                note={interestSections}
+                indent
+              />
             ) : null}
             <Row
               label={<Term name="Self-assessment tax">Self-assessment tax payable</Term>}
@@ -214,13 +228,25 @@ export default function PaymentPage() {
         </div>
       </Card>
 
-      <Callout tone="info" title="Interest on top, if it applies" collapsible>
-        Where a large shortfall should have been paid as advance tax during the
-        year, sections 234B and 234C add interest at 1% a month. On{" "}
-        {inr(due)} that would be modest, but on a bigger gap it stops being modest
-        quickly. Paying before {shortDate("2026-03-15")} in the year itself is the
-        way to avoid it.
-      </Callout>
+      <Card>
+        <CardHeader
+          title="Interest and fee, worked out"
+          eyebrow={
+            current.interest.total > 0
+              ? `${inr(current.interest.total)} of the amount above is not tax`
+              : "None of the amount above is interest"
+          }
+        />
+        <div className="px-4 py-4">
+          <InterestBreakdown interest={current.interest} />
+          <p className="mt-3 text-[12px] leading-relaxed text-ink-faint">
+            Nobody withholds these for you and no Form 16 mentions them, which is
+            why a shortfall found in September costs more than the shortfall
+            itself. Paying by {shortDate("2026-03-15")} inside the year is what
+            stops 234B and 234C running at all.
+          </p>
+        </div>
+      </Card>
     </div>
   );
 }

@@ -106,3 +106,30 @@ export const NEW_REGIME_ALLOWED_DEDUCTIONS = new Set([
   "standardDeduction",
   "s57iia",
 ]);
+
+/** Start of the assessment year — where 234B interest begins running */
+export const AY_START = "2026-04-01";
+
+/** Interest under sections 234A, 234B and 234C: 1% for every month or part */
+export const INTEREST_RATE_PER_MONTH = 0.01;
+
+/**
+ * Advance tax instalments for a non-corporate assessee (Section 211).
+ * `cumulative` is the fraction of the year's tax that should have been paid by
+ * that date; `relaxed` is the lower figure the first and second provisos to
+ * section 234C accept without charging interest.
+ */
+export const ADVANCE_TAX_INSTALMENTS = [
+  { due: "2025-06-15", label: "15 June", cumulative: 0.15, relaxed: 0.12, months: 3 },
+  { due: "2025-09-15", label: "15 September", cumulative: 0.45, relaxed: 0.36, months: 3 },
+  { due: "2025-12-15", label: "15 December", cumulative: 0.75, relaxed: 0.75, months: 3 },
+  { due: "2026-03-15", label: "15 March", cumulative: 1, relaxed: 1, months: 1 },
+] as const;
+
+/** Section 234F fee for filing after the due date */
+export const LATE_FEE_234F = {
+  standard: 5_000,
+  reduced: 1_000,
+  /** total income at or below which the reduced fee applies */
+  reducedUpTo: 500_000,
+} as const;

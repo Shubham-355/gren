@@ -80,6 +80,11 @@ Implemented against **FY 2025-26 / Assessment Year 2026-27** (Finance Act 2025):
 - Surcharge with marginal relief at each threshold, capped at 25% in the new
   regime
 - 4% health and education cess, and rounding under section 288A
+- Interest and fee for paying late — 234A on tax unpaid past the due date, 234B
+  where advance tax and TDS left more than 10% of the bill open, 234C at each of
+  the four instalment dates separately (with the 12% / 36% relaxation), and the
+  flat 234F fee. Charged on amounts rounded down under Rule 119A, counted in
+  months-or-part, and added to what the return asks for
 - Break-even shelter, solved numerically rather than looked up: how much
   old-regime relief you would need before the old regime wins at your income
 - ITR-1 eligibility, checked against eight real disqualifying conditions

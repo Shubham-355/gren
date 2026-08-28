@@ -1317,6 +1317,9 @@ export function toTaxpayerInput(s: AppState): TaxpayerInput {
     advanceTaxPaid: s.advanceTaxPaid,
     selfAssessmentTaxPaid: s.selfAssessmentTaxPaid,
     tdsOnOtherIncome: tdsOnOtherIncome(s),
+    // Interest runs to the day you file, so a submitted return freezes it and
+    // an unsubmitted one keeps accruing against today.
+    filedOn: s.filing.submittedAt ?? undefined,
   };
 }
 

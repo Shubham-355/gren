@@ -60,6 +60,7 @@ export default function ConfirmationPage() {
       grossTotalIncome: current.grossTotalIncome,
       totalIncome: current.totalIncome,
       totalTax: current.totalTaxLiability,
+      interest: current.interest.total,
       tds: current.tdsCredit,
       refund: current.refundDue,
       payable: current.taxPayable,
@@ -202,6 +203,12 @@ export default function ConfirmationPage() {
                 label="Total tax"
                 value={inr(current.totalTaxLiability)}
               />
+              {current.interest.total > 0 ? (
+                <FiledLine
+                  label="Interest and late fee"
+                  value={inr(current.interest.total)}
+                />
+              ) : null}
               <FiledLine
                 label="Already paid"
                 value={`− ${inr(current.tdsCredit + current.selfAssessmentTax)}`}
@@ -380,6 +387,7 @@ function buildItrV(d: {
   grossTotalIncome: number;
   totalIncome: number;
   totalTax: number;
+  interest: number;
   tds: number;
   refund: number;
   payable: number;
@@ -410,6 +418,9 @@ function buildItrV(d: {
     `  Gross total income                  ${money(d.grossTotalIncome)}`,
     `  Total income                        ${money(d.totalIncome)}`,
     `  Total tax liability                 ${money(d.totalTax)}`,
+    ...(d.interest > 0
+      ? [`  Interest and fee u/s 234A/B/C/F     ${money(d.interest)}`]
+      : []),
     `  Tax deducted at source              ${money(d.tds)}`,
     d.refund > 0
       ? `  REFUND DUE                          ${money(d.refund)}`

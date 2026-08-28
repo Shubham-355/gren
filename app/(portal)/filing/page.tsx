@@ -384,6 +384,16 @@ export default function FilingPage() {
                   {inr(current.totalTaxLiability)}
                 </span>
               </div>
+              {current.interest.total > 0 ? (
+                <div className="flex justify-between gap-3">
+                  <span className="text-white/[0.82]">
+                    Interest and fee for paying late
+                  </span>
+                  <span className="tnum text-white">
+                    {inr(current.interest.total)}
+                  </span>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-3">
                 <span className="text-white/[0.82]">Already paid</span>
                 <span className="tnum text-white">
