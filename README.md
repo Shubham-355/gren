@@ -90,6 +90,10 @@ Implemented against **FY 2025-26 / Assessment Year 2026-27** (Finance Act 2025):
   the four instalment dates separately (with the 12% / 36% relaxation), and the
   flat 234F fee. Charged on amounts rounded down under Rule 119A, counted in
   months-or-part, and added to what the return asks for
+- Advance tax as four dated instalments rather than one number, because 234C
+  asks when it was paid and not only how much. Recorded on the payment screen;
+  until they are, the app charges the worst case and says on screen that it is
+  assuming
 - Break-even shelter, solved numerically rather than looked up: how much
   old-regime relief you would need before the old regime wins at your income
 - ITR-1 eligibility, checked against eight real disqualifying conditions

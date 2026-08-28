@@ -22,6 +22,7 @@ import {
   type Notice,
 } from "@/lib/data/seed";
 import { computeTax } from "@/lib/tax/compute";
+import { ADVANCE_TAX_INSTALMENTS } from "@/lib/tax/constants";
 import type {
   DeductionInput,
   HousePropertyInput,
@@ -245,6 +246,12 @@ export type AppState = {
   // --- filing ---
   filing: FilingState;
   advanceTaxPaid: number;
+  /**
+   * What was paid at each of the four advance tax instalment dates, in order.
+   * The total is `advanceTaxPaid`; the split is what section 234C is actually
+   * charged on, and without it the app has to assume the worst.
+   */
+  advanceTaxInstalments: number[];
   selfAssessmentTaxPaid: number;
 
   // --- post filing ---
@@ -308,6 +315,8 @@ export type AppState = {
   selectForm: (form: "ITR-1" | "ITR-2") => void;
   confirmReview: () => void;
   payTax: (amount: number) => void;
+  /** records one advance tax instalment, and keeps the total in step */
+  setAdvanceTaxInstalment: (index: number, amount: number) => void;
   submitReturn: (ack: string) => void;
   everify: () => void;
 
@@ -518,6 +527,7 @@ const initialState = {
     everifiedAt: null,
   } as FilingState,
   advanceTaxPaid: 0,
+  advanceTaxInstalments: [0, 0, 0, 0],
   selfAssessmentTaxPaid: 0,
 
   notices: initialNotices,
@@ -877,6 +887,24 @@ export const useAppStore = create<AppState>()(
       confirmReview: () =>
         set((s) => ({ filing: { ...s.filing, reviewConfirmed: true } })),
 
+      setAdvanceTaxInstalment: (index, amount) => {
+        const before = taxAndInterestNow(get());
+        const previous = advanceTaxInstalments(get());
+        const next = previous.map((v, i) => (i === index ? amount : v));
+        set({
+          advanceTaxInstalments: next,
+          advanceTaxPaid: next.reduce((sum, v) => sum + v, 0),
+        });
+        const after = taxAndInterestNow(get());
+        get().logAction({
+          actor: "you",
+          tool: "record_advance_tax",
+          summary: `Recorded ₹${amount.toLocaleString("en-IN")} of advance tax paid by ${ADVANCE_TAX_INSTALMENTS[index]?.label ?? "an instalment date"}`,
+          delta: after - before,
+          why: "Advance tax is credited against your bill, and the date it was paid on is what section 234C interest is worked out from.",
+        });
+      },
+
       payTax: (amount) => {
         const challan = `SYN-CHLN-${Date.now().toString().slice(-8)}`;
         set((s) => ({
@@ -1216,6 +1244,7 @@ export const useAppStore = create<AppState>()(
         reconciliation: s.reconciliation,
         filing: s.filing,
         advanceTaxPaid: s.advanceTaxPaid,
+        advanceTaxInstalments: s.advanceTaxInstalments,
         selfAssessmentTaxPaid: s.selfAssessmentTaxPaid,
         notices: s.notices,
         grievances: s.grievances,
@@ -1258,6 +1287,15 @@ export function readIncomeField(s: AppState, field: IncomeField): number {
 
 function taxNow(s: AppState): number {
   return computeTax(toTaxpayerInput(s)).totalTaxLiability;
+}
+
+/**
+ * Tax plus the interest and fee on top of it. Recording an advance tax
+ * instalment cannot move the tax itself by a rupee — what it moves is the 234C
+ * interest, so that is what its timeline entry has to be measured against.
+ */
+function taxAndInterestNow(s: AppState): number {
+  return computeTax(toTaxpayerInput(s)).totalTaxAndInterest;
 }
 
 /**
@@ -1308,6 +1346,29 @@ function resolutionSummary(
   }
 }
 
+/**
+ * The four instalments, tolerating a persisted state written before the field
+ * existed.
+ */
+export function advanceTaxInstalments(s: AppState): number[] {
+  const stored = s.advanceTaxInstalments;
+  return ADVANCE_TAX_INSTALMENTS.map((_, i) =>
+    typeof stored?.[i] === "number" ? stored[i] : 0,
+  );
+}
+
+/**
+ * The same four as a running total, which is the shape section 234C compares
+ * against. Returns undefined when nothing has been recorded, so the interest
+ * calculation knows it is assuming rather than reading.
+ */
+export function advanceTaxCumulative(s: AppState): number[] | undefined {
+  const paid = advanceTaxInstalments(s);
+  if (!paid.some((n) => n > 0)) return undefined;
+  let running = 0;
+  return paid.map((n) => (running += n));
+}
+
 export function toTaxpayerInput(s: AppState): TaxpayerInput {
   return {
     age: s.profile.age,
@@ -1324,6 +1385,7 @@ export function toTaxpayerInput(s: AppState): TaxpayerInput {
     hra: s.hra,
     deductions: s.deductions,
     advanceTaxPaid: s.advanceTaxPaid,
+    advanceTaxSchedule: advanceTaxCumulative(s),
     selfAssessmentTaxPaid: s.selfAssessmentTaxPaid,
     tdsOnOtherIncome: tdsOnOtherIncome(s),
     // Interest runs to the day you file, so a submitted return freezes it and

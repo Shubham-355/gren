@@ -13,6 +13,8 @@ import {
 import { FLOW_STEPS, nextStep, stepDone } from "@/lib/flow";
 import { inrPlain } from "@/lib/format";
 import {
+  advanceTaxCumulative,
+  advanceTaxInstalments,
   declaredFor,
   pendingMismatches,
   refundStage,
@@ -181,6 +183,12 @@ export function buildScreenContext(state: AppState, pathname: string) {
         instalmentDatesAssumed: current.interest.scheduleAssumed,
       },
       totalTaxAndInterest: current.totalTaxAndInterest,
+      advanceTax: {
+        total: current.advanceTax,
+        /** what was paid at each of the four instalment dates, in order */
+        instalments: advanceTaxInstalments(state),
+        recordedByDate: advanceTaxCumulative(state) !== undefined,
+      },
       tdsCredit: current.tdsCredit,
       selfAssessmentTaxPaid: current.selfAssessmentTax,
       refundDue: current.refundDue,

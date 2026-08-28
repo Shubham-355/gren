@@ -11,6 +11,7 @@ import {
   CardHeader,
   ChoiceGroup,
   ComputedTag,
+  MoneyInput,
   PageHeader,
   Row,
   Stat,
@@ -20,8 +21,8 @@ import { InterestBreakdown } from "@/components/ui/InterestBreakdown";
 import { inr, shortDate } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
 import { buildPaymentConfirmation } from "@/lib/confirmations";
-import { useAppStore } from "@/lib/store/useAppStore";
-import { ASSESSMENT_YEAR } from "@/lib/tax/constants";
+import { advanceTaxInstalments, useAppStore } from "@/lib/store/useAppStore";
+import { ADVANCE_TAX_INSTALMENTS, ASSESSMENT_YEAR } from "@/lib/tax/constants";
 
 type Method = "netbanking" | "upi" | "card";
 
@@ -114,6 +115,7 @@ export default function PaymentPage() {
           sections 234B and 234C, which charge 1% a month for not having paid it
           as advance tax during the year.
         </Callout>
+        <AdvanceTaxCard />
         <div className="flex gap-2">
           <Link
             href="/filing"
@@ -228,6 +230,8 @@ export default function PaymentPage() {
         </div>
       </Card>
 
+      <AdvanceTaxCard />
+
       <Card>
         <CardHeader
           title="Interest and fee, worked out"
@@ -248,5 +252,76 @@ export default function PaymentPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+/**
+ * Advance tax, as four dated instalments rather than one number.
+ *
+ * Section 234C does not ask how much you paid, it asks when — 15% by 15 June,
+ * 45% by 15 September, and so on, with its own three months of interest at
+ * each date that came up short. With only a total to go on the app has to
+ * assume the worst and charge for all four. This is where that assumption
+ * gets replaced by what actually happened.
+ */
+function AdvanceTaxCard() {
+  const state = useAppStore();
+  const { current } = useTax();
+  const paid = advanceTaxInstalments(state);
+  const base = current.interest.assessedTax;
+  const total = paid.reduce((sum, n) => sum + n, 0);
+
+  const rows = ADVANCE_TAX_INSTALMENTS.map((instalment, i) => {
+    const cumulativePaid = paid
+      .slice(0, i + 1)
+      .reduce((sum, n) => sum + n, 0);
+    return {
+      instalment,
+      index: i,
+      required: Math.round(base * instalment.cumulative),
+      cumulativePaid,
+      met: base <= 0 || cumulativePaid >= Math.round(base * instalment.relaxed),
+    };
+  });
+
+  return (
+    <Card>
+      <CardHeader
+        title="Did you pay advance tax during the year?"
+        eyebrow="Optional · changes the 234C figure"
+        description="Leave these at zero if you did not. Recording the dates is what lets the interest be worked out from what you did rather than from the worst case."
+      />
+      <div className="space-y-3 px-4 py-4">
+        {rows.map((row) => (
+          <div
+            key={row.instalment.due}
+            className="grid gap-2.5 sm:grid-cols-[1fr_10rem] sm:items-center"
+          >
+            <div className="min-w-0">
+              <div className="text-[14px] font-medium">
+                By {row.instalment.label}
+                <span className="ml-1.5 text-[11.5px] font-normal text-ink-faint">
+                  {Math.round(row.instalment.cumulative * 100)}% cumulative
+                </span>
+              </div>
+              <p className="mt-0.5 text-[12px] leading-snug text-ink-soft">
+                {base <= 0
+                  ? "Nothing was due at this date — TDS covered the bill."
+                  : row.met
+                    ? `Met — ${inr(row.cumulativePaid)} against ${inr(row.required)} due by then.`
+                    : `Short by ${inr(Math.max(0, row.required - row.cumulativePaid))} of the ${inr(row.required)} due by then.`}
+              </p>
+            </div>
+            <MoneyInput
+              value={paid[row.index]}
+              onValueChange={(v) => state.setAdvanceTaxInstalment(row.index, v)}
+            />
+          </div>
+        ))}
+        <div className="border-t border-line pt-1">
+          <Row label="Advance tax recorded" value={total} strong />
+        </div>
+      </div>
+    </Card>
   );
 }
