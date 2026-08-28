@@ -1,5 +1,6 @@
 import {
   CESS_RATE,
+  FILING_DEADLINE,
   LIMITS,
   NEW_REGIME_MAX_SURCHARGE,
   NEW_REGIME_SLABS,
@@ -58,6 +59,13 @@ export type DeductionInput = {
   s80DDB: number;
   s80E: number;
   s80G: number;
+  /**
+   * true for the notified national funds — PM National Relief Fund, National
+   * Defence Fund and the like — which are deductible in full with no ceiling.
+   * false, the default, is an ordinary registered institution: half the
+   * donation, and only up to a tenth of adjusted gross total income.
+   */
+  s80G_fullyDeductible: boolean;
   s80TTA: number;
   s80EEB: number;
   s80U: number;
@@ -132,6 +140,19 @@ const r0 = (n: number) => Math.round(n);
 const clampMin0 = (n: number) => (n > 0 ? n : 0);
 const num = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? n : 0);
 const inr = (n: number) => n.toLocaleString("en-IN");
+
+/**
+ * Whether the old regime can still be chosen.
+ *
+ * Under section 115BAC(6) a salaried taxpayer opts out of the default new
+ * regime by saying so *on a return filed by the due date*. Miss it, and the
+ * belated return under 139(4) is locked to the new regime however much the old
+ * one would have saved. The regime screen has always said this in prose; this
+ * is the function that makes it true.
+ */
+export function oldRegimeAvailable(asOf: Date = new Date()): boolean {
+  return asOf <= new Date(FILING_DEADLINE);
+}
 
 /** ------------------------------------------------------------------
  *  Slab arithmetic
@@ -236,7 +257,9 @@ export function computeHouseProperty(hp: HousePropertyInput, regime: Regime) {
             ? `Capped at ₹2,00,000 — you entered ₹${inr(num(hp.homeLoanInterest))}`
             : undefined,
     });
-    const raw = -allowed;
+    // `-allowed` is negative zero when nothing is allowed, which is not equal
+    // to 0 under Object.is and reads as "-₹0" to anything that formats it.
+    const raw = allowed > 0 ? -allowed : 0;
     const income = Math.max(raw, -LIMITS.housePropertyLossSetOff);
     return { income, steps, setOffCapped: raw < income, rawIncome: raw };
   }
@@ -350,6 +373,8 @@ export function computeChapterVIA(
     basicSalary: number;
     age: number;
     otherSources: OtherSourcesInput;
+    /** needed for the 80G qualifying limit, which is a share of income */
+    grossTotalIncome: number;
   },
 ): { total: number; breakdown: LineItem[] } {
   const { employerNps, basicSalary, age } = context;
@@ -425,9 +450,6 @@ export function computeChapterVIA(
       note: "No monetary ceiling; available for 8 assessment years",
     });
 
-  const g80 = num(d.s80G);
-  if (g80 > 0) breakdown.push({ label: "80G — donations", amount: g80 });
-
   const interestRule = interestDeductionRule(age, context.otherSources);
   const claimedInterest = num(d.s80TTA);
   const tta = Math.min(
@@ -460,12 +482,98 @@ export function computeChapterVIA(
   if (eeb > 0)
     breakdown.push({ label: "80EEB — electric vehicle loan interest", amount: eeb });
 
-  const u80 = Math.min(num(d.s80U), LIMITS.s80U_severe);
+  // 80U is a flat deduction, not a reimbursement of what the disability cost:
+  // ₹75,000 on a certified disability and ₹1,25,000 where it is certified
+  // severe. Reading it as a free-text amount and capping at the higher figure
+  // let anyone with an ordinary certificate claim the severe one.
+  const u80 = flatDeduction80U(num(d.s80U));
   if (u80 > 0)
-    breakdown.push({ label: "80U — taxpayer with a disability", amount: u80 });
+    breakdown.push({
+      label: "80U — taxpayer with a disability",
+      amount: u80,
+      note:
+        u80 === LIMITS.s80U_severe
+          ? "Flat ₹1,25,000 for a certified severe disability"
+          : "Flat ₹75,000; ₹1,25,000 only where the disability is certified severe",
+    });
+
+  // 80G comes last because its own ceiling is a share of income measured
+  // *after* every other Chapter VI-A deduction has come off.
+  const g80 = computeSection80G(
+    num(d.s80G),
+    d.s80G_fullyDeductible,
+    context.grossTotalIncome,
+    breakdown.reduce((sum, item) => sum + item.amount, 0),
+  );
+  if (g80.line) breakdown.push(g80.line);
 
   const total = breakdown.reduce((sum, item) => sum + item.amount, 0);
   return { total, breakdown };
+}
+
+/** The band a stored 80U figure belongs to. Nothing in between is a claim. */
+export function flatDeduction80U(stored: number): number {
+  if (stored >= LIMITS.s80U_severe) return LIMITS.s80U_severe;
+  if (stored > 0) return LIMITS.s80U_normal;
+  return 0;
+}
+
+/**
+ * Section 80G, which almost nobody gets right by eye.
+ *
+ * A donation to an ordinary registered institution is not a deduction of what
+ * you gave. It is half of what you gave, and only of the part that falls within
+ * 10% of your adjusted gross total income — adjusted meaning after every other
+ * Chapter VI-A deduction. Give ₹1,00,000 on a ₹6,00,000 adjusted income and the
+ * deduction is ₹30,000, not ₹1,00,000.
+ *
+ * The notified national funds are the exception: 100%, no qualifying limit.
+ *
+ * ASSUMPTION: the two rarer categories — 50% without a qualifying limit, and
+ * 100% subject to one — are not modelled. Every fund here is treated as one of
+ * the two common cases, and the UI says which one it is using.
+ */
+export function computeSection80G(
+  donated: number,
+  fullyDeductible: boolean,
+  grossTotalIncome: number,
+  otherChapterVIA: number,
+): { amount: number; qualifying: number; adjustedGti: number; line?: LineItem } {
+  const amountGiven = clampMin0(num(donated));
+  const adjustedGti = clampMin0(num(grossTotalIncome) - clampMin0(otherChapterVIA));
+
+  if (amountGiven <= 0) return { amount: 0, qualifying: 0, adjustedGti };
+
+  if (fullyDeductible) {
+    return {
+      amount: amountGiven,
+      qualifying: amountGiven,
+      adjustedGti,
+      line: {
+        label: "80G — donations to a notified national fund",
+        amount: amountGiven,
+        note: "Deductible in full, with no qualifying limit",
+      },
+    };
+  }
+
+  const cap = adjustedGti * LIMITS.s80G_qualifyingShareOfIncome;
+  const qualifying = Math.min(amountGiven, cap);
+  const amount = Math.round(qualifying * LIMITS.s80G_rate_ordinary);
+
+  return {
+    amount,
+    qualifying,
+    adjustedGti,
+    line: {
+      label: "80G — donations to a registered institution",
+      amount,
+      note:
+        qualifying < amountGiven
+          ? `Half of ₹${inr(Math.round(qualifying))} — the part of your ₹${inr(amountGiven)} that falls within 10% of adjusted gross total income`
+          : `Half of the ₹${inr(amountGiven)} you gave; the rest of the section is a matter of which fund it was`,
+    },
+  };
 }
 
 /** ------------------------------------------------------------------
@@ -603,6 +711,7 @@ export function computeTax(
     basicSalary: num(s.basic),
     age: input.age,
     otherSources: input.otherSources,
+    grossTotalIncome,
   });
   // Chapter VI-A can never take income below zero.
   const chapterVIA = Math.min(via.total, clampMin0(grossTotalIncome));
@@ -741,6 +850,7 @@ export function breakEvenDeductions(input: TaxpayerInput): number {
       // 80E carries no ceiling, which makes it the right lever for a search.
       s80E: amount,
       s80G: 0,
+      s80G_fullyDeductible: false,
       s80TTA: 0,
       s80EEB: 0,
       s80U: 0,

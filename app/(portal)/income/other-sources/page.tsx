@@ -14,10 +14,13 @@ import {
   Row,
   Term,
 } from "@/components/ui";
-import { aisEntries } from "@/lib/data/seed";
 import { inr } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
-import { pendingMismatches, useAppStore } from "@/lib/store/useAppStore";
+import {
+  pendingMismatches,
+  useAppStore,
+  visibleAisEntries,
+} from "@/lib/store/useAppStore";
 import { interestDeductionRule } from "@/lib/tax/compute";
 
 export default function OtherSourcesPage() {
@@ -33,7 +36,8 @@ export default function OtherSourcesPage() {
     state.otherSources,
   );
 
-  const aisTotal = aisEntries
+  const aisEntriesForPan = visibleAisEntries(state);
+  const aisTotal = aisEntriesForPan
     .filter((e) => e.category === "Interest" || e.category === "Dividend")
     .reduce((s, e) => s + e.aisAmount, 0);
 
@@ -144,7 +148,7 @@ export default function OtherSourcesPage() {
               }
             />
             <ul className="divide-y divide-[color:var(--line)]">
-              {aisEntries
+              {aisEntriesForPan
                 .filter(
                   (e) => e.category === "Interest" || e.category === "Dividend",
                 )

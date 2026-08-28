@@ -18,11 +18,12 @@ import {
 import { housePropertySeed } from "@/lib/data/seed";
 import { inr } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
-import { useAppStore } from "@/lib/store/useAppStore";
+import { hasSeededDocuments, useAppStore } from "@/lib/store/useAppStore";
 import { LIMITS } from "@/lib/tax/constants";
 
 export default function HousePropertyPage() {
   const state = useAppStore();
+  const hasDocuments = hasSeededDocuments(state);
   const { houseProperty, current } = useTax();
   const hp = state.houseProperty;
   const letOut = hp.type === "let-out";
@@ -88,7 +89,11 @@ export default function HousePropertyPage() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field
                       label="Rent received for the year"
-                      hint={`${housePropertySeed.monthlyRent.toLocaleString("en-IN")} a month`}
+                      hint={
+                        hasDocuments
+                          ? `${housePropertySeed.monthlyRent.toLocaleString("en-IN")} a month on record`
+                          : "The whole year's rent, before any deduction"
+                      }
                     >
                       <MoneyInput
                         value={hp.annualRentReceived}
@@ -145,14 +150,22 @@ export default function HousePropertyPage() {
                 ) : null}
 
                 <Callout tone="plum" title="The principal is claimed elsewhere" collapsible>
-                  Only interest belongs on this page. The principal portion of your
-                  EMI —{" "}
-                  <span className="tnum">
-                    {inr(housePropertySeed.homeLoanPrincipal)}
-                  </span>{" "}
-                  — is a{" "}
-                  <Term name="Section 80C">80C</Term> deduction and lives on the
-                  deductions screen.
+                  Only interest belongs on this page. The principal portion of
+                  your EMI
+                  {hasDocuments ? (
+                    <>
+                      {" "}
+                      —{" "}
+                      <span className="tnum">
+                        {inr(housePropertySeed.homeLoanPrincipal)}
+                      </span>{" "}
+                      —
+                    </>
+                  ) : (
+                    " "
+                  )}
+                  is a <Term name="Section 80C">80C</Term> deduction and lives on
+                  the deductions screen.
                 </Callout>
               </div>
             </Card>

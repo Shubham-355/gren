@@ -16,10 +16,7 @@ import {
   cx,
 } from "@/components/ui";
 import {
-  aisEntries,
   buildTis,
-  form26AS,
-  totalTdsIn26AS,
   type AisEntry,
 } from "@/lib/data/seed";
 import { Expandable } from "@/components/ui/Expandable";
@@ -29,6 +26,10 @@ import {
   aisStatus,
   declaredFor,
   pendingMismatches,
+  returnHasIncome,
+  visible26AS,
+  visibleAisEntries,
+  visibleTdsIn26AS,
   toTaxpayerInput,
   useAppStore,
   type AppState,
@@ -56,7 +57,10 @@ export default function ReconciliationPage() {
   const [view, setView] = useState<View>("reconcile");
   const pending = pendingMismatches(state);
 
-  const declaredTotals = aisEntries.map((e) => ({
+  const entries = visibleAisEntries(state);
+  const totalTdsIn26AS = visibleTdsIn26AS(state);
+
+  const declaredTotals = entries.map((e) => ({
     id: e.id,
     aisAmount: e.aisAmount,
     declaredAmount: declaredFor(state, e.id),
@@ -67,9 +71,9 @@ export default function ReconciliationPage() {
   const projected = useMemo(() => projectSettleAll(state), [state]);
 
   // Three different things, and only the middle one is a decision you made.
-  const agreeing = aisEntries.filter((e) => aisStatus(state, e) === "agrees");
-  const settled = aisEntries.filter((e) => aisStatus(state, e) === "settled");
-  const informational = aisEntries.filter(
+  const agreeing = entries.filter((e) => aisStatus(state, e) === "agrees");
+  const settled = entries.filter((e) => aisStatus(state, e) === "settled");
+  const informational = entries.filter(
     (e) => aisStatus(state, e) === "informational",
   );
   const accountedFor = [...agreeing, ...settled, ...informational];
@@ -146,13 +150,28 @@ export default function ReconciliationPage() {
                 </svg>
               </span>
               <h1 className="mt-3.5 font-display text-[32px] leading-[1.1] sm:text-[38px]">
-                Everything matches
+                {entries.length === 0
+                  ? "There is nothing to reconcile"
+                  : "Everything matches"}
               </h1>
               <p className="mt-2.5 max-w-[36rem] text-[14.5px] leading-relaxed text-ink-soft">
-                All {aisEntries.length} entries the department holds against your
-                PAN are now accounted for. This is the single best predictor of a
-                return that processes without a query.
+                {entries.length === 0 ? (
+                  <>
+                    No AIS, TIS or 26AS entries are held against this PAN, so
+                    there is nothing to check your return against. On a return
+                    with documents behind it, this is the step that catches the
+                    interest and dividends you had forgotten — and the one whose
+                    loose ends turn into a notice three months later.
+                  </>
+                ) : (
+                  <>
+                    All {entries.length} entries the department holds against
+                    your PAN are now accounted for. This is the single best
+                    predictor of a return that processes without a query.
+                  </>
+                )}
               </p>
+              {entries.length === 0 ? <LoadSampleDocuments /> : null}
             </Card>
 
             <Card className="overflow-hidden">
@@ -205,7 +224,7 @@ export default function ReconciliationPage() {
               })}
             </Card>
 
-            <Card className="p-4">
+            <Card className={cx("p-4", entries.length === 0 && "hidden")}>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-[14px] text-ink-soft">
                   Tax credit now claimed
@@ -599,7 +618,7 @@ function projectSettleAll(state: AppState) {
     "ais-kaveri-interest": "other",
   };
 
-  for (const entry of aisEntries) {
+  for (const entry of visibleAisEntries(state)) {
     // Only entries still asking for a decision. An entry that already agrees
     // with the return, or that is not income at all, has nothing to add.
     if (aisStatus(state, entry) !== "open") continue;
@@ -699,7 +718,7 @@ function AisView() {
         description="Every transaction reported against your PAN this year, by whoever reported it."
       />
       <ul className="divide-y divide-[color:var(--line)]">
-        {aisEntries.map((entry) => {
+        {visibleAisEntries(state).map((entry) => {
           const r = state.reconciliation[entry.id];
           return (
             <li key={entry.id} className="px-4 py-3">
@@ -805,6 +824,7 @@ function Form26ASView() {
   const state = useAppStore();
   const { current } = useTax();
   const claimed = current.tdsCredit;
+  const totalTdsIn26AS = visibleTdsIn26AS(state);
 
   return (
     <div className="space-y-4">
@@ -829,7 +849,7 @@ function Form26ASView() {
               </tr>
             </thead>
             <tbody>
-              {form26AS.map((row) => (
+              {visible26AS(state).map((row) => (
                 <tr key={row.id} className="border-b border-line">
                   <td className="mono px-4 py-2.5 text-[12px]">{row.section}</td>
                   <td className="px-4 py-2.5">
@@ -917,4 +937,58 @@ function badgeToneFor(
     default:
       return "neutral";
   }
+}
+
+/**
+ * The way back to the worked example, offered where its absence is felt.
+ *
+ * Two taps, not one: it replaces whatever is in the return, and a button that
+ * quietly discards your work is not a button. Only shown on the seeded PAN,
+ * because that is the only one the sample documents belong to.
+ */
+function LoadSampleDocuments() {
+  const canLoad = useAppStore((s) => s.canLoadSampleDocuments());
+  const load = useAppStore((s) => s.loadSampleDocuments);
+  const hasEntries = useAppStore(returnHasIncome);
+  const [confirming, setConfirming] = useState(false);
+
+  if (!canLoad) return null;
+
+  return (
+    <div className="mt-5 border-t border-[color:var(--line)] pt-4">
+      {confirming ? (
+        <div className="animate-rise">
+          <p className="text-[13.5px] leading-relaxed text-ink-soft">
+            This replaces the return with the sample taxpayer&rsquo;s — a Form
+            16 of ₹18,40,000 and an AIS with three differences to settle.
+            Anything you have entered goes with it.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2.5">
+            <Button size="lg" onClick={load}>
+              Load the sample return
+            </Button>
+            <Button
+              size="lg"
+              variant="secondary"
+              onClick={() => setConfirming(false)}
+            >
+              Keep what I have
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="text-[13.5px] leading-relaxed text-ink-soft">
+            Want to see what this screen does when there is something to settle?
+          </p>
+          <button
+            onClick={() => (hasEntries ? setConfirming(true) : load())}
+            className="tap mt-2 border-b border-[color:var(--plum)] text-[13.5px] font-medium text-[color:var(--plum)]"
+          >
+            Load the sample documents
+          </button>
+        </>
+      )}
+    </div>
+  );
 }

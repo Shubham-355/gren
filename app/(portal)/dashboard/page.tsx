@@ -8,6 +8,7 @@ import { FLOW_STEPS, nextStep, stepDone } from "@/lib/flow";
 import { inr } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
 import {
+  hasSeededDocuments,
   pendingMismatches,
   useAppStore,
   visibleNotices,
@@ -30,9 +31,17 @@ export default function DashboardPage() {
     (n) => state.notices[n.id]?.status === "Open" && n.requiresResponse,
   );
 
+  const hasDocuments = hasSeededDocuments(state);
   const action = useMemo(
-    () => nextActionCopy(next.id, pending.length, comparison.recommended, state.regime),
-    [next.id, pending.length, comparison.recommended, state.regime],
+    () =>
+      nextActionCopy(
+        next.id,
+        pending.length,
+        comparison.recommended,
+        state.regime,
+        hasDocuments,
+      ),
+    [next.id, pending.length, comparison.recommended, state.regime, hasDocuments],
   );
 
   const inRefund = current.refundDue > 0;
@@ -328,16 +337,33 @@ function nextActionCopy(
   pending: number,
   recommended: string,
   regime: string,
+  hasDocuments: boolean,
 ): { title: string; body: string; cta: string; time: string } {
   switch (id) {
     case "income":
-      return {
-        title: "Your employer has already told them most of this",
-        body: "Import the Form 16 and your salary, allowances and the tax already deducted fill themselves in. You only correct what looks wrong.",
-        cta: "Bring in my salary",
-        time: "about 1 minute",
-      };
+      // Promising a Form 16 to a PAN that has none is the one thing this card
+      // must not do — it is the first sentence of the product.
+      return hasDocuments
+        ? {
+            title: "Your employer has already told them most of this",
+            body: "Import the Form 16 and your salary, allowances and the tax already deducted fill themselves in. You only correct what looks wrong.",
+            cta: "Bring in my salary",
+            time: "about 1 minute",
+          }
+        : {
+            title: "Nothing is on record, so let’s build it",
+            body: "No Form 16 was filed against this PAN, so the return starts empty. Enter your salary and the tax already deducted — or ask Saathi and answer its questions instead. Every figure after this is computed from what you put in.",
+            cta: "Enter my salary",
+            time: "about 4 minutes",
+          };
     case "reconcile":
+      if (pending === 0)
+        return {
+          title: "There is nothing to check your return against",
+          body: "No AIS or 26AS entries are on record for this PAN, so there is nothing to reconcile. On a real return this is the step that catches the interest and dividends you forgot.",
+          cta: "See the reconciliation screen",
+          time: "under a minute",
+        };
       return {
         title:
           pending === 1

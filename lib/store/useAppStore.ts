@@ -9,6 +9,7 @@ import {
   deductionEvidence,
   filingHistory,
   form16,
+  form26AS,
   grievanceTopics,
   grossSalaryFromForm16,
   housePropertySeed,
@@ -21,8 +22,11 @@ import {
   type GrievanceTopicId,
   type Notice,
 } from "@/lib/data/seed";
-import { computeTax } from "@/lib/tax/compute";
-import { ADVANCE_TAX_INSTALMENTS } from "@/lib/tax/constants";
+import { computeTax, oldRegimeAvailable } from "@/lib/tax/compute";
+import {
+  ADVANCE_TAX_INSTALMENTS,
+  FILING_DEADLINE,
+} from "@/lib/tax/constants";
 import type {
   DeductionInput,
   HousePropertyInput,
@@ -102,6 +106,12 @@ export type CopilotMessage = {
     logId?: string;
   }[];
   error?: boolean;
+  /**
+   * Answered from the platform's own rules because the model was unreachable.
+   * The actions are real either way — this only changes what the bubble says
+   * about where the answer came from.
+   */
+  offline?: boolean;
 };
 
 /**
@@ -276,9 +286,30 @@ export type AppState = {
   lastTouchedModule: string | null;
 
   // ================= actions =================
-  login: (method: "pan" | "aadhaar", identifier?: string) => void;
+  login: (
+    method: "pan" | "aadhaar",
+    identifier?: string,
+    /**
+     * Overrides what the identifier implies. The demo PAN is asked which of
+     * the two it wants, because "everything is already here" and "start from
+     * nothing" are two different products and only one of them can be shown
+     * by default.
+     */
+    kind?: "demo" | "fresh",
+  ) => void;
   logout: () => void;
   resetDemo: () => void;
+  /**
+   * Switches an empty return onto the seeded taxpayer's documents.
+   *
+   * Reconciliation is the one module that cannot demonstrate itself with
+   * nothing on record — its three differences are the whole point of the
+   * screen. This is the way back to them without signing out and picking the
+   * tour at the login screen, and it only means anything on the seeded PAN.
+   */
+  loadSampleDocuments: () => void;
+  /** true when this PAN is the seeded one, so the sample documents exist */
+  canLoadSampleDocuments: () => boolean;
 
   updateProfile: (patch: Partial<ProfileState>) => void;
   setRefundAccount: (bankId: string) => void;
@@ -420,6 +451,7 @@ const initialDeductions: DeductionInput = {
   s80DDB: 0,
   s80E: 0,
   s80G: 0,
+  s80G_fullyDeductible: false,
   s80TTA: 0,
   s80EEB: 0,
   s80U: 0,
@@ -463,12 +495,13 @@ const initialState = {
   loginMethod: null,
 
   /**
-   * Whose return this is.
+   * Whose return this is, and whether anything is on record for it.
    *
-   * "demo" is the seeded taxpayer you get by signing in with the PAN the login
-   * screen prefills. Any other PAN is a "fresh" account: the documents the
-   * department would hold still arrive, but the seeded persona's filing
-   * history and notices do not, because they are not this taxpayer's.
+   * "demo" is the seeded taxpayer: a Form 16, an AIS with three real
+   * mismatches in it, past returns and open notices. "fresh" is a PAN with
+   * nothing filed against it, where the return has to be built by answering
+   * for it. Any PAN other than the seeded one is always fresh; the seeded PAN
+   * is asked at sign-in which of the two it wants.
    */
   accountKind: "demo" as "demo" | "fresh",
 
@@ -555,20 +588,23 @@ export const useAppStore = create<AppState>()(
       ...initialState,
 
       // ---------------- session ----------------
-      login: (method, identifier) => {
+      login: (method, identifier, kind) => {
         const typed = (identifier ?? "").trim().toUpperCase().replace(/\s/g, "");
-        const isDemo =
+        const matchesSeed =
           typed.length === 0 ||
           (method === "pan"
             ? typed === taxpayer.pan
             : typed === taxpayer.aadhaarMasked.replace(/\s/g, ""));
+        // Only the seeded identifier can be "demo" at all; for it, the choice
+        // made on the login screen wins.
+        const isDemo = matchesSeed && kind !== "fresh";
 
         set((s) => ({
           loggedIn: true,
           loginMethod: method,
           accountKind: isDemo ? "demo" : "fresh",
           profile:
-            isDemo || method !== "pan"
+            matchesSeed || method !== "pan"
               ? s.profile
               : { ...s.profile, pan: typed },
           // A fresh PAN has no past returns and no open notices against it.
@@ -578,7 +614,9 @@ export const useAppStore = create<AppState>()(
         get().logAction({
           actor: "you",
           tool: "login",
-          summary: `Signed in with ${method === "pan" ? "PAN" : "Aadhaar"}`,
+          summary: `Signed in with ${method === "pan" ? "PAN" : "Aadhaar"}${
+            isDemo ? "" : " — nothing on record for this PAN"
+          }`,
         });
       },
 
@@ -591,6 +629,36 @@ export const useAppStore = create<AppState>()(
           loggedIn: get().loggedIn,
           loginMethod: get().loginMethod,
         }),
+
+      canLoadSampleDocuments: () => get().profile.pan === taxpayer.pan,
+
+      loadSampleDocuments: () => {
+        if (!get().canLoadSampleDocuments()) return;
+        // The seeded AIS is only coherent against the seeded return — a
+        // difference between Ananya's employer and a salary you typed
+        // yourself would be a difference about nobody. So this loads the
+        // starting point the tour begins from, rather than layering documents
+        // over what is already there.
+        set({
+          ...initialState,
+          hydrated: true,
+          loggedIn: get().loggedIn,
+          loginMethod: get().loginMethod,
+          accountKind: "demo",
+          copilotMessages: get().copilotMessages,
+        });
+        get().logAction({
+          actor: "you",
+          tool: "load_sample_documents",
+          summary: "Loaded the sample Form 16, AIS and 26AS",
+          why: "The return was reset to the seeded taxpayer's starting point, because the sample differences are only meaningful against the sample return.",
+        });
+        get().pushToast({
+          tone: "info",
+          title: "Sample documents loaded",
+          body: "A Form 16 and an AIS with three real differences are now on record.",
+        });
+      },
 
       // ---------------- profile ----------------
       updateProfile: (patch) =>
@@ -616,6 +684,17 @@ export const useAppStore = create<AppState>()(
 
       // ---------------- income ----------------
       importForm16: (actor = "you") => {
+        // There is no Form 16 filed against a PAN this prototype was handed at
+        // sign-in. Importing one anyway would put another taxpayer's salary in
+        // this return.
+        if (!hasSeededDocuments(get())) {
+          get().pushToast({
+            tone: "warn",
+            title: "No Form 16 on record",
+            body: "Nothing has been filed against this PAN. Enter your salary yourself, or ask Saathi to walk you through it.",
+          });
+          return;
+        }
         const previousSalary = get().salary;
         const previouslyImported = get().form16Imported;
         const before = taxNow(get());
@@ -722,6 +801,17 @@ export const useAppStore = create<AppState>()(
       setRegime: (regime, actor = "you") => {
         const previous = get().regime;
         if (previous === regime) return;
+        // The old regime is an option only on a return filed by the due date.
+        // Past it, refusing here is the honest thing — the alternative is
+        // showing a saving the department would not allow.
+        if (regime === "old" && !oldRegimeAvailable()) {
+          get().pushToast({
+            tone: "warn",
+            title: "The old regime is no longer available",
+            body: `It can only be chosen on a return filed by ${FILING_DEADLINE}. A belated return is locked to the new regime.`,
+          });
+          return;
+        }
         const previouslyExplicit = get().regimeChosenExplicitly;
         const before = taxNow(get());
         set({ regime, regimeChosenExplicitly: true });
@@ -1329,6 +1419,7 @@ export function sectionLabel(
     s80DDB: "80DDB",
     s80E: "80E",
     s80G: "80G",
+    s80G_fullyDeductible: "80G national fund flag",
     s80TTA: "80TTA",
     s80EEB: "80EEB",
     s80U: "80U",
@@ -1411,7 +1502,7 @@ export function toTaxpayerInput(s: AppState): TaxpayerInput {
  * offered to tax, so it follows the reconciliation decisions.
  */
 export function tdsOnOtherIncome(s: AppState): number {
-  return aisEntries.reduce((sum, entry) => {
+  return visibleAisEntries(s).reduce((sum, entry) => {
     if (entry.category === "Salary") return sum;
     const state = s.reconciliation[entry.id];
     if (!state) return sum;
@@ -1469,15 +1560,61 @@ export function aisStatus(s: AppState, entry: AisEntry): AisStatus {
 
 /** Only the entries genuinely asking the taxpayer for a decision. */
 export function pendingMismatches(s: AppState): AisEntry[] {
-  return aisEntries.filter((e) => aisStatus(s, e) === "open");
+  return visibleAisEntries(s).filter((e) => aisStatus(s, e) === "open");
 }
 
 /**
- * The seeded persona's past returns and departmental notices. They belong to
- * that taxpayer, not to whatever PAN was typed at sign-in, so a fresh account
- * sees neither — the documents it does get (Form 16, AIS, 26AS) are the ones a
- * real portal would fetch for any PAN.
+ * Everything that belongs to the seeded persona rather than to whoever signed
+ * in: past returns, notices, the Form 16 and the AIS.
+ *
+ * This used to stop at history and notices, on the reasoning that a real
+ * portal fetches documents for any PAN. It does — but it fetches *that PAN's*
+ * documents, and this prototype has none for a PAN it has just been handed. So
+ * a fresh account got Ananya's ₹18,40,000 Form 16 and Ananya's three AIS
+ * mismatches, which is the one thing this app is otherwise careful never to
+ * do: show you a number nobody put there.
+ *
+ * A fresh account now starts genuinely empty and the return has to be built by
+ * answering for it — which is also the only way to see the platform work
+ * rather than watch it recite.
  */
+/**
+ * Whether there is any income in the return at all, however it got there.
+ *
+ * The flow used to read "has the Form 16 been imported", which is the same
+ * question only for an account that has a Form 16. On a PAN with nothing filed
+ * against it that condition can never come true, and the whole journey sat on
+ * step one no matter how much the taxpayer typed in.
+ */
+export function returnHasIncome(s: AppState): boolean {
+  const salary = Object.values(s.salary).reduce(
+    (sum, v) => sum + (typeof v === "number" ? v : 0),
+    0,
+  );
+  const other = Object.values(s.otherSources).reduce(
+    (sum, v) => sum + (typeof v === "number" ? v : 0),
+    0,
+  );
+  return salary > 0 || other > 0 || s.houseProperty.enabled;
+}
+
+export function hasSeededDocuments(s: AppState): boolean {
+  return s.accountKind !== "fresh";
+}
+
+export function visibleAisEntries(s: AppState): AisEntry[] {
+  return hasSeededDocuments(s) ? aisEntries : [];
+}
+
+export function visible26AS(s: AppState): typeof form26AS {
+  return hasSeededDocuments(s) ? form26AS : [];
+}
+
+/** Credit sitting in 26AS for this PAN — nil where there is no 26AS. */
+export function visibleTdsIn26AS(s: AppState): number {
+  return visible26AS(s).reduce((sum, e) => sum + e.taxDeducted, 0);
+}
+
 export function visibleFilingHistory(s: AppState): FilingRecord[] {
   return s.accountKind === "fresh" ? [] : filingHistory;
 }

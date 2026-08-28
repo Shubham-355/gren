@@ -1,6 +1,6 @@
 import { discoveryQuestions } from "@/lib/data/discovery";
 import type { AppState } from "@/lib/store/useAppStore";
-import { pendingMismatches } from "@/lib/store/useAppStore";
+import { pendingMismatches, returnHasIncome } from "@/lib/store/useAppStore";
 
 /**
  * The guided journey, as one list.
@@ -110,9 +110,11 @@ export function stepForPath(pathname: string): FlowStep | null {
 export function stepDone(id: FlowStepId, s: AppState): boolean {
   switch (id) {
     case "income":
-      return s.form16Imported;
+      // Imported from a Form 16 or typed in by hand — the step exists to get
+      // income into the return, not to get a particular document read.
+      return returnHasIncome(s);
     case "reconcile":
-      return s.form16Imported && pendingMismatches(s).length === 0;
+      return returnHasIncome(s) && pendingMismatches(s).length === 0;
     case "deductions":
       // Every question, not just the first one. Marking the step done after a
       // single answer sent the dashboard — and the copilot's own sense of what
@@ -142,4 +144,25 @@ export function phoneProgress(s: AppState): number {
  */
 export function nextStep(s: AppState): FlowStep {
   return FLOW_STEPS.find((step) => !stepDone(step.id, s)) ?? FLOW_STEPS[7];
+}
+
+/**
+ * The flow step a store module name belongs to.
+ *
+ * `lastTouchedModule` is written whenever anything changes a module — by the
+ * user or by Saathi — and the names it uses are the store's, not the rail's.
+ * Secondary modules (notices, grievance) are not steps and map to nothing.
+ */
+export function stepForModule(module: string | null): FlowStepId | null {
+  if (!module) return null;
+  const map: Record<string, FlowStepId> = {
+    income: "income",
+    reconciliation: "reconcile",
+    reconcile: "reconcile",
+    deductions: "deductions",
+    regime: "regime",
+    filing: "review",
+    refund: "refund",
+  };
+  return map[module] ?? null;
 }

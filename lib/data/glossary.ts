@@ -109,6 +109,13 @@ export const glossary: GlossaryEntry[] = [
     long: "Section 80D allows the premium you pay for health cover: ₹25,000 for yourself, your spouse and children, rising to ₹50,000 if you are a senior citizen. On top of that you can claim premiums paid for your parents — another ₹25,000, or ₹50,000 if they are senior citizens. Preventive health check-ups count for ₹5,000 within those limits, and can be paid in cash. Old regime only.",
   },
   {
+    term: "Section 80G",
+    aliases: ["80G", "Donations"],
+    category: "Sections",
+    short: "Donations, at half of what you gave and only within 10% of your income.",
+    long: "Section 80G is the deduction people most often overestimate. Give ₹1,00,000 to an ordinary registered institution and you do not deduct ₹1,00,000 — you deduct 50% of it, and only of the part that falls within 10% of your adjusted gross total income, which is your income after every other Chapter VI-A deduction has come off. The notified national funds — the PM National Relief Fund, the National Defence Fund — are the exception, allowed in full with no such ceiling. Anything above ₹2,000 must have been paid other than in cash, and you need the institution's registration number and a receipt.",
+  },
+  {
     term: "Section 80TTA",
     aliases: ["80TTA"],
     category: "Sections",
@@ -167,6 +174,13 @@ export const glossary: GlossaryEntry[] = [
     category: "Money",
     short: "Paying as you earn, in four instalments, when your bill exceeds ₹10,000.",
     long: "If your tax for the year after TDS will exceed ₹10,000, you are meant to pay it in instalments during the year: 15% by 15 June, 45% by 15 September, 75% by 15 December and 100% by 15 March. Salaried people usually satisfy this through TDS alone, but a large amount of interest or dividend income can push you into advance tax territory. Missing the instalments attracts interest under section 234C.",
+  },
+  {
+    term: "Section 115BAC",
+    aliases: ["115BAC", "115BAC(6)", "Default regime"],
+    category: "Sections",
+    short: "The section that makes the new regime the default, and sets when you may leave it.",
+    long: "Section 115BAC is the new tax regime. Since AY 2024-25 it is the default: do nothing and this is what you are taxed under. Sub-section (6) is the part that catches people out — a salaried taxpayer opts out of it by saying so on a return filed on or before the due date under section 139(1). File even one day late and the belated return is locked to the new regime, no matter how much the old one would have saved. That is why the regime choice has a deadline attached to it and the deduction total does not.",
   },
   {
     term: "Section 234A",

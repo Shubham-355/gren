@@ -82,15 +82,21 @@ export const LIMITS = {
   s80D_self_senior: 50_000,
   s80D_parents: 25_000,
   s80D_parents_senior: 50_000,
-  s80D_preventive: 5_000,
   s80TTA: 10_000,
   s80TTB: 50_000,
   s80EEB: 150_000,
-  s80GG: 60_000,
+  /**
+   * 80G: donations to an ordinary registered institution are deductible at 50%
+   * of the amount given, and only up to 10% of adjusted gross total income.
+   * The notified national funds are 100% with no such ceiling.
+   */
+  s80G_rate_ordinary: 0.5,
+  s80G_qualifyingShareOfIncome: 0.1,
+  /** cash donations above this are not deductible at all */
+  s80G_cashCeiling: 2_000,
+  /** 80U is flat, not a ceiling: one figure or the other, nothing between */
   s80U_normal: 75_000,
   s80U_severe: 125_000,
-  s80DD_normal: 75_000,
-  s80DD_severe: 125_000,
   s80DDB: 40_000,
   s80DDB_senior: 100_000,
   homeLoanInterestSelfOccupied: 200_000,

@@ -15,86 +15,19 @@ import {
   TextInput,
   cx,
 } from "@/components/ui";
-import { form16 } from "@/lib/data/seed";
 import { useAppStore } from "@/lib/store/useAppStore";
 
 export default function ProfilePage() {
   const state = useAppStore();
   const router = useRouter();
 
-  const refundAccount = state.profile.bankAccounts.find(
-    (b) => b.nominatedForRefund,
-  );
-
-  const readiness = [
-    {
-      label: "PAN linked to Aadhaar",
-      ok: state.profile.panAadhaarLinked,
-      detail: state.profile.panAadhaarLinked
-        ? "Linked. Everything downstream works."
-        : "Unlinked. Your PAN becomes inoperative — no refund, higher TDS, returns that will not process.",
-    },
-    {
-      label: "A validated bank account for the refund",
-      ok: Boolean(refundAccount?.validated),
-      detail: refundAccount?.validated
-        ? `${refundAccount.bank} ${refundAccount.accountNumberMasked} is validated and nominated.`
-        : "A refund can only be credited to a pre-validated account whose name matches your PAN.",
-    },
-    {
-      label: "Mobile number that receives the Aadhaar OTP",
-      ok: Boolean(state.profile.mobile),
-      detail:
-        "e-Verification uses the number registered with Aadhaar, not the one on this profile. If they differ, verification fails.",
-    },
-    {
-      label: "Form 16 on record",
-      ok: state.form16Imported,
-      detail: state.form16Imported
-        ? `Imported from ${form16.employer.name}.`
-        : "Not imported yet — most of your return can be filled from it.",
-    },
-  ];
-
-  const ready = readiness.filter((r) => r.ok).length;
-
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Account"
         title="Your details"
-        intro="Four things have to be right before a return will file cleanly and a refund will actually reach you. This page is about those four, not about collecting information for its own sake."
-        aside={
-          <Badge tone={ready === readiness.length ? "ok" : "warn"}>
-            {ready} of {readiness.length} ready
-          </Badge>
-        }
+        intro="Your record as the department holds it, and the two things a refund actually depends on: a PAN linked to Aadhaar, and a validated bank account in your own name."
       />
-
-      {/* ---------------- readiness ---------------- */}
-      <Card tone={ready === readiness.length ? "ok" : "accent"}>
-        <CardHeader title="Pre-filing checklist" />
-        <ul className="divide-y divide-[color:var(--line)]">
-          {readiness.map((r) => (
-            <li key={r.label} className="flex items-start gap-3 px-4 py-3">
-              <span
-                className={cx(
-                  "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white",
-                  r.ok ? "bg-[color:var(--ok)]" : "bg-[color:var(--clay)]",
-                )}
-              >
-                {r.ok ? "✓" : "!"}
-              </span>
-              <div className="min-w-0">
-                <div className="text-[14px] font-medium">{r.label}</div>
-                <p className="mt-0.5 text-[12.5px] leading-snug text-ink-soft">
-                  {r.detail}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </Card>
 
       <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
         {/* ---------------- personal ---------------- */}

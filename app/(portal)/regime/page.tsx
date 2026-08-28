@@ -15,6 +15,7 @@ import {
 import { daysUntil, inr, shortDate } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
 import { useAppStore } from "@/lib/store/useAppStore";
+import { oldRegimeAvailable } from "@/lib/tax/compute";
 import type { Regime, TaxComputation } from "@/lib/tax/compute";
 import { BELATED_DEADLINE, FILING_DEADLINE } from "@/lib/tax/constants";
 
@@ -34,6 +35,11 @@ export default function RegimePage() {
   const onRecommended = state.regime === recommended;
   const other: Regime = state.regime === "old" ? "new" : "old";
   const daysLeft = daysUntil(FILING_DEADLINE);
+  // Past the due date the old regime stops being a choice at all, so the
+  // screen has to stop offering it rather than quoting a saving that cannot
+  // be had.
+  const oldStillOpen = oldRegimeAvailable();
+  const oldIsBlocked = !oldStillOpen && recommended === "old";
 
   // Keeping a regime is a real decision, so it is recorded as one — even
   // though nothing about the numbers changes.
@@ -202,7 +208,7 @@ export default function RegimePage() {
 
       {/* --------------------------- the decision --------------------------- */}
       <div className="mt-5 hidden flex-wrap items-center gap-4 lg:flex">
-        {onRecommended ? (
+        {onRecommended || oldIsBlocked ? (
           <Button size="lg" onClick={keepCurrent}>
             Keep the {state.regime} regime and continue
           </Button>
@@ -212,38 +218,74 @@ export default function RegimePage() {
           </Button>
         )}
         <span className="text-[14px] text-ink-soft">
-          or{" "}
-          {onRecommended ? (
-            <button
-              onClick={() => state.setRegime(other)}
-              className="border-b border-[color:var(--plum)] text-[color:var(--plum)]"
-            >
-              use the {other} regime instead
-            </button>
+          {oldIsBlocked ? (
+            <>and the old regime is closed to you now</>
           ) : (
-            <button
-              onClick={keepCurrent}
-              className="border-b border-[color:var(--plum)] text-[color:var(--plum)]"
-            >
-              stay on the {state.regime} regime and pay the extra{" "}
-              {inr(comparison.saving)}
-            </button>
+            <>
+              or{" "}
+              {onRecommended ? (
+                other === "old" && !oldStillOpen ? (
+                  <span className="text-ink-faint">
+                    the old regime is closed after the due date
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => state.setRegime(other)}
+                    className="border-b border-[color:var(--plum)] text-[color:var(--plum)]"
+                  >
+                    use the {other} regime instead
+                  </button>
+                )
+              ) : (
+                <button
+                  onClick={keepCurrent}
+                  className="border-b border-[color:var(--plum)] text-[color:var(--plum)]"
+                >
+                  stay on the {state.regime} regime and pay the extra{" "}
+                  {inr(comparison.saving)}
+                </button>
+              )}
+            </>
           )}
         </span>
       </div>
 
       {/* ------------------------ deadline consequence ---------------------- */}
-      <Card tone="warn" className="mt-5 px-5 py-4">
-        <div className="text-[14px] font-semibold text-[color:var(--warn)]">
-          This choice has a deadline attached
+      <Card tone={oldStillOpen ? "warn" : "alert"} className="mt-5 px-5 py-4">
+        <div
+          className={cx(
+            "text-[14px] font-semibold",
+            oldStillOpen
+              ? "text-[color:var(--warn)]"
+              : "text-[color:var(--alert)]",
+          )}
+        >
+          {oldStillOpen
+            ? "This choice has a deadline attached"
+            : "The choice has closed"}
         </div>
         <p className="mt-1.5 max-w-[52rem] text-[13.5px] leading-relaxed text-ink-soft">
-          File by {shortDate(FILING_DEADLINE)}
-          {daysLeft > 0 ? ` — ${daysLeft} days away — ` : " "}
-          and the regime is yours to pick. A belated return, allowed until{" "}
-          {shortDate(BELATED_DEADLINE)}, is locked to the new regime, which for
-          you would cost {inr(comparison.saving)} on top of the late fee under{" "}
-          <Term name="Section 234F">section 234F</Term>.
+          {oldStillOpen ? (
+            <>
+              File by {shortDate(FILING_DEADLINE)}
+              {daysLeft > 0 ? ` — ${daysLeft} days away — ` : " "}
+              and the regime is yours to pick. A belated return, allowed until{" "}
+              {shortDate(BELATED_DEADLINE)}, is locked to the new regime, which
+              for you would cost {inr(comparison.saving)} on top of the late fee
+              under <Term name="Section 234F">section 234F</Term>.
+            </>
+          ) : (
+            <>
+              {shortDate(FILING_DEADLINE)} has passed, so under{" "}
+              <Term name="Section 115BAC">section 115BAC(6)</Term> the old
+              regime can no longer be opted into. This return goes on the new
+              regime whatever the comparison says — the columns below are left
+              in place so you can see what the delay cost, which here is{" "}
+              {inr(comparison.saving)} plus the fee under{" "}
+              <Term name="Section 234F">section 234F</Term>. A belated return is
+              still accepted until {shortDate(BELATED_DEADLINE)}.
+            </>
+          )}
         </p>
       </Card>
 

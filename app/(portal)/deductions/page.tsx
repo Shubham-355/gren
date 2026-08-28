@@ -27,6 +27,7 @@ import {
 import { inr } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
 import {
+  hasSeededDocuments,
   sectionLabel,
   toTaxpayerInput,
   useAppStore,
@@ -35,6 +36,7 @@ import {
 import {
   ageAwareLimits,
   computeTax,
+  flatDeduction80U,
   interestDeductionRule,
   type DeductionInput,
   type OtherSourcesInput,
@@ -89,8 +91,13 @@ function GuidedDiscovery({ onBrowse }: { onBrowse: () => void }) {
   const setCopilotOpen = useAppStore((s) => s.setCopilotOpen);
 
   const questions = useMemo(
-    () => discoveryQuestionsFor(state.profile.age, state.otherSources),
-    [state.profile.age, state.otherSources],
+    () =>
+      discoveryQuestionsFor(
+        state.profile.age,
+        state.otherSources,
+        hasSeededDocuments(state),
+      ),
+    [state],
   );
 
   const remaining = questions.filter(
@@ -309,6 +316,19 @@ function QuestionBody({
         {question.why}
       </p>
 
+      {question.toggle ? (
+        <div className="mt-7 max-w-[30rem] rounded-[var(--radius-sm)] border border-line bg-surface px-4 py-3.5">
+          <Toggle
+            checked={Boolean(state.deductions[question.toggle.section])}
+            onChange={(v) =>
+              state.setDeduction(question.toggle!.section, v)
+            }
+            label={question.toggle.label}
+            description={question.toggle.description}
+          />
+        </div>
+      ) : null}
+
       {answering ? (
         <div className="mt-7 max-w-[24rem] space-y-4">
           <Field
@@ -397,6 +417,8 @@ const baseSections: {
   ceiling?: number;
   blurb: string;
   term?: string;
+  /** for a flat deduction, where typing an amount would be the wrong question */
+  bands?: { value: string; label: string; amount: number }[];
 }[] = [
   {
     key: "s80C",
@@ -426,7 +448,12 @@ const baseSections: {
     blurb: "Treatment of specified diseases, with a prescription from a specialist",
   },
   { key: "s80E", blurb: "Interest on an education loan — no ceiling, eight years" },
-  { key: "s80G", blurb: "Donations to registered funds and institutions" },
+  {
+    key: "s80G",
+    term: "Section 80G",
+    blurb:
+      "Donations — allowed at half, within 10% of income, unless the toggle below applies",
+  },
   {
     key: "s80TTA",
     ceiling: LIMITS.s80TTA,
@@ -440,8 +467,13 @@ const baseSections: {
   },
   {
     key: "s80U",
-    ceiling: LIMITS.s80U_severe,
-    blurb: "A flat deduction where the taxpayer has a certified disability",
+    blurb:
+      "A flat deduction on a certified disability — the amount does not depend on what it cost you",
+    bands: [
+      { value: "none", label: "None", amount: 0 },
+      { value: "normal", label: inr(LIMITS.s80U_normal), amount: LIMITS.s80U_normal },
+      { value: "severe", label: inr(LIMITS.s80U_severe), amount: LIMITS.s80U_severe },
+    ],
   },
 ];
 
@@ -512,7 +544,11 @@ function SectionList({ onGuided }: { onGuided: () => void }) {
             <div className="divide-y divide-[color:var(--line)]">
               {sectionsFor(state.profile.age, state.otherSources).map((s) => {
                 const raw = state.deductions[s.key] as number;
-                const capped = s.ceiling ? Math.min(raw, s.ceiling) : raw;
+                const capped = s.bands
+                  ? flatDeduction80U(raw)
+                  : s.ceiling
+                    ? Math.min(raw, s.ceiling)
+                    : raw;
                 const over = s.ceiling ? raw > s.ceiling : false;
                 return (
                   <div key={s.key} className="px-4 py-3.5 sm:px-5">
@@ -537,10 +573,32 @@ function SectionList({ onGuided }: { onGuided: () => void }) {
                         </p>
                       </div>
                       <div>
-                        <MoneyInput
-                          value={raw}
-                          onValueChange={(v) => state.setDeduction(s.key, v)}
-                        />
+                        {s.bands ? (
+                          <ChoiceGroup
+                            size="sm"
+                            value={
+                              (
+                                s.bands.find((b) => b.amount === capped) ??
+                                s.bands[0]
+                              ).value
+                            }
+                            onChange={(v) =>
+                              state.setDeduction(
+                                s.key,
+                                s.bands!.find((b) => b.value === v)?.amount ?? 0,
+                              )
+                            }
+                            options={s.bands.map((b) => ({
+                              value: b.value,
+                              label: b.label,
+                            }))}
+                          />
+                        ) : (
+                          <MoneyInput
+                            value={raw}
+                            onValueChange={(v) => state.setDeduction(s.key, v)}
+                          />
+                        )}
                         {over ? (
                           <p className="mt-1 text-[11px] leading-snug text-[color:var(--warn)]">
                             Capped at {inr(capped)}
@@ -560,7 +618,24 @@ function SectionList({ onGuided }: { onGuided: () => void }) {
                 description="Raises the 80D parents ceiling from ₹25,000 to ₹50,000."
               />
             </div>
+            <div className="border-t border-line px-4 py-3.5 sm:px-5">
+              <Toggle
+                checked={state.deductions.s80G_fullyDeductible}
+                onChange={(v) => state.setDeduction("s80G_fullyDeductible", v)}
+                label="My donation went to a notified national fund"
+                description="Deductible in full. Left off, a donation is allowed at half, and only within 10% of income after every other deduction."
+              />
+            </div>
           </Card>
+
+          <Callout tone="warn" title="Sections this platform does not handle" collapsible>
+            80DD for a dependant with a disability, 80GG for rent paid where no
+            HRA is received, and 80CCC are real and are not implemented here —
+            neither the arithmetic nor the questions. If one of them applies to
+            you, nothing on this screen will tell you so, and the figures you
+            see are lower than the ones you are entitled to. The sections that
+            are here are listed above and are computed in full.
+          </Callout>
 
           <Callout tone="info" title="Two deductions you never enter here" collapsible>
             The standard deduction is applied automatically —{" "}
@@ -623,6 +698,7 @@ const ZERO_DEDUCTIONS: DeductionInput = {
   s80DDB: 0,
   s80E: 0,
   s80G: 0,
+  s80G_fullyDeductible: false,
   s80TTA: 0,
   s80EEB: 0,
   s80U: 0,

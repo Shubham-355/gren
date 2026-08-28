@@ -18,7 +18,7 @@ import { InlineMoneyRow, MoneyField } from "@/components/ui/InlineMoney";
 import { form16, rentDetails } from "@/lib/data/seed";
 import { inr, shortDate } from "@/lib/format";
 import { useTax } from "@/lib/hooks/useTax";
-import { useAppStore } from "@/lib/store/useAppStore";
+import { hasSeededDocuments, useAppStore } from "@/lib/store/useAppStore";
 import type { SalaryInput } from "@/lib/tax/compute";
 
 /**
@@ -134,11 +134,17 @@ export default function SalaryPage() {
                 {state.hra.claiming ? (
                   <>
                     <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">
-                      {inr(rentDetails.monthlyRent)} a month for{" "}
-                      {rentDetails.monthsPaid} months in {rentDetails.city}.{" "}
-                      {rentDetails.city} is not a metro for{" "}
-                      <Term name="HRA">HRA</Term>, so the exemption is capped at
-                      40% of basic rather than 50%.
+                      {hasSeededDocuments(state) ? (
+                        <>
+                          {inr(rentDetails.monthlyRent)} a month for{" "}
+                          {rentDetails.monthsPaid} months in {rentDetails.city}.{" "}
+                        </>
+                      ) : null}
+                      {state.profile.address.city} is{" "}
+                      {state.hra.metroCity ? "a metro" : "not a metro"} for{" "}
+                      <Term name="HRA">HRA</Term>, so the exemption is capped at{" "}
+                      {state.hra.metroCity ? "50" : "40"}% of basic rather than{" "}
+                      {state.hra.metroCity ? "40" : "50"}%.
                     </p>
 
                     <div className="mt-3.5 rounded-[var(--radius-sm)] bg-paper px-4 py-3.5">
@@ -328,6 +334,8 @@ export default function SalaryPage() {
 
 function ImportGate({ onManual }: { onManual: () => void }) {
   const importForm16 = useAppStore((s) => s.importForm16);
+  const setCopilotOpen = useAppStore((s) => s.setCopilotOpen);
+  const hasDocuments = useAppStore(hasSeededDocuments);
   const gross =
     form16.salary.basic +
     form16.salary.hra +
@@ -341,12 +349,37 @@ function ImportGate({ onManual }: { onManual: () => void }) {
       <PhoneStepHeader back={{ href: "/dashboard" }} />
       <div className="mx-auto max-w-[38rem]">
         <h1 className="font-display text-[32px] leading-[1.1] tracking-[-0.01em] sm:text-[46px] sm:leading-[1.05]">
-          Start with your Form 16
+          {hasDocuments
+            ? "Start with your Form 16"
+            : "Nothing has been filed against this PAN"}
         </h1>
         <p className="mt-3.5 text-[15px] leading-relaxed text-ink-soft [text-wrap:pretty] sm:text-[16px]">
-          Your employer already told the department all of this. Bring it in
-          rather than retyping it.
+          {hasDocuments
+            ? "Your employer already told the department all of this. Bring it in rather than retyping it."
+            : "No Form 16, no AIS, no 26AS — so there is nothing to pull in and nothing to check your entries against. The return gets built from what you enter, and every figure on this platform will be computed from it."}
         </p>
+
+        {!hasDocuments ? (
+          <div className="mt-7 space-y-3">
+            <Button block size="lg" onClick={onManual}>
+              Enter my salary myself
+            </Button>
+            <button
+              onClick={() => setCopilotOpen(true)}
+              className="tap w-full rounded-[var(--radius-sm)] border border-[color:var(--petrol)] px-5 py-3 text-[15px] font-medium text-[color:var(--petrol)]"
+            >
+              Have Saathi ask me for it instead
+            </button>
+            <Callout tone="info" title="Why there is nothing here" collapsible>
+              A real portal fetches the documents filed against the PAN you
+              signed in with. This prototype only has documents for its one
+              seeded taxpayer, and inventing a Form 16 for any other PAN would
+              mean putting somebody else&rsquo;s salary in your return. Sign out
+              and use the demo PAN if you want to see that path.
+            </Callout>
+          </div>
+        ) : (
+          <>
 
         <Card className="mt-7 overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b border-line bg-sunk px-5 py-4">
@@ -388,6 +421,8 @@ function ImportGate({ onManual }: { onManual: () => void }) {
             bound by whatever you declared to your employer during the year.
           </Callout>
         </div>
+          </>
+        )}
       </div>
     </div>
   );

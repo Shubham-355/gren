@@ -17,11 +17,16 @@ import { ASSESSMENT_YEAR } from "@/lib/tax/constants";
  * Step 1 — Login.
  *
  * PAN, then a mocked OTP. There is deliberately no welcome interstitial
- * afterwards: the next thing you see is the dashboard with your data already
- * in it.
+ * afterwards: the next thing you see is the dashboard.
+ *
+ * The one exception is the seeded PAN, which is asked which of two products it
+ * wants — the tour, with a Form 16 and an AIS already on record, or the same
+ * platform with nothing filed against the PAN and a return that has to be
+ * built by answering for it. Defaulting to the tour silently made the second
+ * one unreachable, and the second one is the one that shows the work.
  */
 
-type Stage = "identify" | "otp";
+type Stage = "identify" | "otp" | "choose";
 
 const panPattern = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const aadhaarPattern = /^[0-9]{12}$/;
@@ -92,14 +97,30 @@ export default function LoginPage() {
     setError(null);
     setVerifying(true);
     verifyTimer.current = window.setTimeout(() => {
-      // The identifier decides whose return this is: the prefilled PAN opens
-      // the seeded taxpayer, anything else starts a fresh one.
-      login(method, identifier);
+      setVerifying(false);
+      // Only the seeded identifier has anything to prefill, so only it gets
+      // asked. Anything else has no documents either way.
+      if (matchesSeed) {
+        setStage("choose");
+        return;
+      }
+      login(method, identifier, "fresh");
       router.push("/dashboard");
     }, 2000);
   }
 
+  function enter(kind: "demo" | "fresh") {
+    login(method, identifier, kind);
+    router.push("/dashboard");
+  }
+
   const maskedMobile = `••${taxpayer.mobile.slice(-4)}`;
+
+  const typed = identifier.trim().toUpperCase().replace(/\s/g, "");
+  const matchesSeed =
+    method === "pan"
+      ? typed === taxpayer.pan
+      : typed === taxpayer.aadhaarMasked.replace(/\s/g, "");
 
   return (
     <div className="flex min-h-dvh flex-col bg-paper">
@@ -116,12 +137,16 @@ export default function LoginPage() {
           <h1 className="mt-4 font-display text-[36px] leading-[1.04] tracking-[-0.018em] sm:text-[48px] lg:text-[56px]">
             {stage === "identify"
               ? "Let’s start with your PAN"
-              : "Six digits, then you’re in"}
+              : stage === "otp"
+                ? "Six digits, then you’re in"
+                : "Two ways to see this"}
           </h1>
           <p className="mt-4 max-w-[28rem] text-[16px] leading-relaxed text-ink-soft [text-wrap:pretty] sm:text-[17px]">
             {stage === "identify"
-              ? "It is how we pull your Form 16, AIS and 26AS. Nothing gets filed until you review the whole return and tap submit."
-              : `We would normally text a code to the mobile ending ${maskedMobile}. This is a prototype — enter any six digits.`}
+              ? "It identifies the return. Nothing is filled in for you and nothing gets filed until you review the whole thing and tap submit."
+              : stage === "otp"
+                ? `We would normally text a code to the mobile ending ${maskedMobile}. This is a prototype — enter any six digits.`
+                : "Nothing is prefilled unless you ask for it. Build the return yourself, the way a first-time filer would — or, since this is the one PAN with documents behind it, take the prefilled tour instead. The platform is identical either way."}
           </p>
 
           <div className="mt-9 hidden max-w-[26rem] space-y-[18px] lg:block">
@@ -138,7 +163,14 @@ export default function LoginPage() {
 
         {/* ------------------------------ card ------------------------------- */}
         <div className="rounded-[var(--radius-lg)] border border-line bg-surface p-6 shadow-[var(--shadow-sm)] sm:px-8 sm:py-[34px]">
-          <div className="flex gap-1.5 rounded-[11px] bg-sunk p-1">
+          <div
+            className={cx(
+              "flex gap-1.5 rounded-[11px] bg-sunk p-1",
+              // The method is settled by the time the fork is offered; leaving
+              // the tabs live invites a tap that would silently reset it.
+              stage === "choose" && "hidden",
+            )}
+          >
             {(["pan", "aadhaar"] as const).map((m) => (
               <button
                 key={m}
@@ -162,6 +194,33 @@ export default function LoginPage() {
             ))}
           </div>
 
+          {stage === "choose" ? (
+            <div className="space-y-3">
+              <PathChoice
+                title="Start from nothing"
+                badge="Default"
+                body="Nothing is filled in for you. Your name, PAN and bank account are on record; the return itself is yours to build — enter your salary and answer for your deductions, or tell Saathi to walk you through it. Every figure is computed from what you say."
+                onSelect={() => enter("fresh")}
+                primary
+              />
+              <PathChoice
+                title="Prefilled — take the tour"
+                badge="Fastest"
+                body={`A Form 16 from ${form16.employer.name}, an AIS with three real differences to settle, past returns and an open notice. Nothing to type, but nothing of yours either.`}
+                onSelect={() => enter("demo")}
+              />
+              <button
+                onClick={() => {
+                  setStage("identify");
+                  setOtp("");
+                }}
+                className="tap block pt-1 text-[13px] font-medium text-[color:var(--plum)]"
+              >
+                Use a different PAN instead
+              </button>
+            </div>
+          ) : (
+          <>
           <div className="mt-6">
             <label
               htmlFor="identifier"
@@ -246,15 +305,24 @@ export default function LoginPage() {
             )}
           </div>
 
-          {/* what is already waiting on the other side */}
-          <div className="mt-5 space-y-2.5 border-t border-line pt-5">
-            <FetchRow done label={`Form 16 · ${form16.employer.name.split(" ").slice(0, 2).join(" ")}`} />
-            <FetchRow done label="26AS · 3 TDS credit entries" />
-            <FetchRow
-              done={stage === "otp"}
-              label={stage === "otp" ? "AIS & TIS · 6 entries" : "AIS & TIS — fetching"}
-            />
-          </div>
+          {/* What the demo PAN has behind it, if the tour is chosen. Only the
+              seeded identifier has any of this, so it is only shown for it. */}
+          {matchesSeed ? (
+            <div className="mt-5 space-y-2.5 border-t border-line pt-5">
+              <FetchRow done label={`Form 16 · ${form16.employer.name.split(" ").slice(0, 2).join(" ")}`} />
+              <FetchRow done label="26AS · 3 TDS credit entries" />
+              <FetchRow
+                done={stage === "otp"}
+                label={stage === "otp" ? "AIS & TIS · 6 entries" : "AIS & TIS — fetching"}
+              />
+              <p className="text-[11.5px] leading-snug text-ink-faint">
+                Available on this PAN if you choose the prefilled tour. Nothing
+                is brought in otherwise.
+              </p>
+            </div>
+          ) : null}
+          </>
+          )}
         </div>
       </main>
 
@@ -306,5 +374,52 @@ function FetchRow({ done, label }: { done: boolean; label: string }) {
         {label}
       </span>
     </div>
+  );
+}
+
+/**
+ * One of the two ways in. Big enough to be a decision rather than a setting —
+ * this is the fork between watching the platform and using it.
+ */
+function PathChoice({
+  title,
+  badge,
+  body,
+  onSelect,
+  primary,
+}: {
+  title: string;
+  badge: string;
+  body: string;
+  onSelect: () => void;
+  primary?: boolean;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className={cx(
+        "block w-full rounded-[var(--radius-sm)] border p-4 text-left transition-colors sm:p-[18px]",
+        primary
+          ? "border-[color:var(--plum)] bg-plum-50 hover:bg-[color:var(--plum-50-hover,var(--plum-50))]"
+          : "border-line-strong bg-surface hover:bg-sunk",
+      )}
+    >
+      <span className="flex flex-wrap items-center gap-2">
+        <span className="font-display text-[19px] leading-tight">{title}</span>
+        <span
+          className={cx(
+            "rounded-[var(--radius-pill)] px-2 py-[2px] text-[11px] font-semibold",
+            primary
+              ? "bg-[color:var(--plum)] text-white"
+              : "bg-sunk text-ink-soft",
+          )}
+        >
+          {badge}
+        </span>
+      </span>
+      <span className="mt-1.5 block text-[13.5px] leading-relaxed text-ink-soft">
+        {body}
+      </span>
+    </button>
   );
 }

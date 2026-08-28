@@ -1,6 +1,7 @@
 import { deductionEvidence } from "./seed";
 import type { DeductionInput, OtherSourcesInput } from "@/lib/tax/compute";
 import { interestDeductionRule } from "@/lib/tax/compute";
+import { LIMITS } from "@/lib/tax/constants";
 
 /**
  * The guided-discovery script for the deductions workspace.
@@ -20,6 +21,18 @@ export type DiscoveryQuestion = {
   suggestedLabel: string;
   ceiling?: number;
   followUp?: string;
+  /**
+   * A yes/no asked alongside the amount, where the answer changes what the
+   * amount is actually worth. Two of these exist in the Act and neither could
+   * be reached from the guided flow before: whether your parents are seniors,
+   * which doubles the 80D ceiling, and whether a donation went to a notified
+   * national fund, which is the difference between all of it and half of it.
+   */
+  toggle?: {
+    section: keyof DeductionInput;
+    label: string;
+    description: string;
+  };
   /** only asked when the taxpayer is on, or considering, the old regime */
   oldRegimeOnly: boolean;
 };
@@ -78,6 +91,11 @@ export const discoveryQuestions: DiscoveryQuestion[] = [
     ceiling: 50_000,
     followUp:
       "If your parents are senior citizens and have no insurance at all, medical expenses you paid for them can be claimed instead, up to the same ₹50,000.",
+    toggle: {
+      section: "s80D_parents_senior",
+      label: "At least one of my parents is 60 or older",
+      description: "Raises the ceiling on this answer from ₹25,000 to ₹50,000.",
+    },
     oldRegimeOnly: true,
   },
   {
@@ -106,11 +124,20 @@ export const discoveryQuestions: DiscoveryQuestion[] = [
   {
     id: "donations",
     question: "Did you donate to a charity or a relief fund this year?",
-    why: "Donations to registered institutions are deductible, at either 50% or 100% depending on the fund. Anything above ₹2,000 has to be paid other than in cash.",
+    why: "This is the section people most often overestimate. A donation to an ordinary registered institution is not deducted in full — it is half of what you gave, and only of the part that falls within 10% of your income after every other deduction. The notified national funds are the exception, and are allowed in full.",
     section: "s80G",
     sectionLabel: "80G",
     suggested: deductionEvidence.donations80G,
     suggestedLabel: "Eligible donations",
+    followUp: `Anything above ₹${LIMITS.s80G_cashCeiling.toLocaleString(
+      "en-IN",
+    )} has to have been paid other than in cash to count at all.`,
+    toggle: {
+      section: "s80G_fullyDeductible",
+      label: "This went to a notified national fund",
+      description:
+        "The PM National Relief Fund, the National Defence Fund and the like — deductible in full, with no ceiling. An ordinary registered trust is not one of these.",
+    },
     oldRegimeOnly: true,
   },
   {
@@ -138,10 +165,21 @@ export const discoveryQuestions: DiscoveryQuestion[] = [
 export function discoveryQuestionsFor(
   age: number,
   otherSources: OtherSourcesInput,
+  /**
+   * false when nothing is filed against this PAN. Every `suggested` figure in
+   * the script belongs to the seeded taxpayer — offering "Yes — ₹1,50,000" to
+   * someone whose 80C the platform knows nothing about is the same fabrication
+   * as importing a Form 16 that is not theirs.
+   */
+  hasDocuments = true,
 ): DiscoveryQuestion[] {
   const rule = interestDeductionRule(age, otherSources);
   return discoveryQuestions.map((q) => {
-    if (q.id !== "savings-interest") return q;
+    if (q.id !== "savings-interest") {
+      return hasDocuments
+        ? q
+        : { ...q, suggested: 0, suggestedLabel: "Nothing on record for this PAN" };
+    }
     const senior = rule.section === "80TTB";
     return {
       ...q,
@@ -157,7 +195,7 @@ export function discoveryQuestionsFor(
       suggested: Math.min(rule.eligibleInterest, rule.ceiling),
       suggestedLabel: senior
         ? "The savings and deposit interest you have declared"
-        : q.suggestedLabel,
+        : "The savings interest you have declared",
       ceiling: rule.ceiling,
       followUp: senior
         ? "The deduction comes off the interest you actually declared, so it can never be more than what is in your return."
