@@ -95,6 +95,24 @@ export function InterestBreakdown({
         </Callout>
       ) : null}
 
+      {interest.accruesPerMonth > 0 ? (
+        <div className="rounded-[var(--radius-sm)] border border-warn-100 bg-warn-50 px-3.5 py-3">
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="text-[13.5px] font-medium text-ink">
+              Every further month adds
+            </span>
+            <span className="tnum shrink-0 text-[14px] font-semibold text-[color:var(--warn)]">
+              {inr(interest.accruesPerMonth)}
+            </span>
+          </div>
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-soft">
+            234B runs until the day you file and 234C has already stopped, so
+            this is the whole cost of waiting — and it is charged for a part of
+            a month exactly as for a full one.
+          </p>
+        </div>
+      ) : null}
+
       {!interest.late ? (
         <p className="text-[12px] leading-relaxed text-ink-faint">
           Filing by {shortDate(FILING_DEADLINE)} keeps sections 234A and 234F at

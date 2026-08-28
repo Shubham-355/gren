@@ -308,10 +308,14 @@ export function Stat({
     plum: "text-[color:var(--plum)]",
   } as const;
   return (
-    <div className="min-w-0">
+    // A column, so the label block can take the slack and the figures still
+    // line up. In a row of three on a 320px phone one label wraps to two lines
+    // and the others do not — "Need a reply" against "Total" and "Responded" —
+    // which used to drop that one number half a line below its neighbours.
+    <div className="flex min-w-0 flex-col">
       {/* Wrap, do not truncate. In a two-column grid on a phone these labels
           became "REFUND …" and "ACKNOWLE…", which is worse than two lines. */}
-      <div className="eyebrow flex flex-wrap items-start gap-x-1.5">
+      <div className="eyebrow flex grow flex-wrap items-start gap-x-1.5">
         <span className="leading-snug">{label}</span>
         {tag}
       </div>

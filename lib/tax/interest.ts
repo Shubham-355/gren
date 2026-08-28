@@ -85,6 +85,12 @@ export type InterestResult = {
   scheduleAssumed: boolean;
   /** tax due on the returned income — the base for 234B and 234C */
   assessedTax: number;
+  /**
+   * What one more month of not filing adds. 234C stopped when the year did, so
+   * only 234A and 234B are still running — and this is the number that makes
+   * "file it now" an argument rather than a nag.
+   */
+  accruesPerMonth: number;
 };
 
 /**
@@ -265,13 +271,21 @@ export function computeInterest(input: InterestInput): InterestResult {
   ];
 
   const msLate = input.filedOn.getTime() - deadline.getTime();
+  const late = msLate > 0;
+
+  // 234B runs while any of the bill is unpaid; 234A only once the due date has
+  // gone. Both are 1% of their own base for each further month.
+  const running =
+    (charges[1].amount > 0 ? roundedForInterest(assessedTax - num(input.advanceTaxPaid)) : 0) +
+    (late ? roundedForInterest(unpaid) : 0);
 
   return {
     charges,
     total: charges.reduce((sum, charge) => sum + charge.amount, 0),
-    late: msLate > 0,
-    daysLate: msLate > 0 ? Math.ceil(msLate / 86_400_000) : 0,
+    late,
+    daysLate: late ? Math.ceil(msLate / 86_400_000) : 0,
     scheduleAssumed: !input.advanceTaxSchedule && num(input.advanceTaxPaid) > 0,
     assessedTax,
+    accruesPerMonth: Math.round(running * INTEREST_RATE_PER_MONTH),
   };
 }

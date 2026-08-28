@@ -150,6 +150,7 @@ export type UndoPayload =
       previousDeclared: number;
     }
   | { kind: "income"; field: IncomeField; previous: number }
+  | { kind: "advanceTax"; index: number; previous: number }
   | {
       kind: "form16";
       previousSalary: SalaryInput;
@@ -902,6 +903,7 @@ export const useAppStore = create<AppState>()(
           summary: `Recorded ₹${amount.toLocaleString("en-IN")} of advance tax paid by ${ADVANCE_TAX_INSTALMENTS[index]?.label ?? "an instalment date"}`,
           delta: after - before,
           why: "Advance tax is credited against your bill, and the date it was paid on is what section 234C interest is worked out from.",
+          undo: { kind: "advanceTax", index, previous: previous[index] },
         });
       },
 
@@ -1057,6 +1059,16 @@ export const useAppStore = create<AppState>()(
           case "income":
             get().setIncomeFieldSilently(u.field, u.previous);
             break;
+          case "advanceTax": {
+            const restored = advanceTaxInstalments(get()).map((v, i) =>
+              i === u.index ? u.previous : v,
+            );
+            set({
+              advanceTaxInstalments: restored,
+              advanceTaxPaid: restored.reduce((sum, v) => sum + v, 0),
+            });
+            break;
+          }
           case "form16":
             set({
               salary: u.previousSalary,
